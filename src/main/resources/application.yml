@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: claude-kiro
+
+logging:
+  level:
+    root: INFO
+    org.yanhuang.ai: INFO
+
+app:
+  api-key: ${API_KEY:sk-testing}
+  anthropic-version: ${ANTHROPIC_VERSION:2023-06-01}
+  kiro:
+    base-url: ${KIRO_BASE_URL:https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse}
+    profile-arn: ${KIRO_PROFILE_ARN:arn:aws:codewhisperer:us-east-1:699475941385:profile/EHGA3GRVQMUK}
+    access-token: ${KIRO_ACCESS_TOKEN:}
+    refresh-token: ${KIRO_REFRESH_TOKEN:}
+    access-token-file: ${KIRO_TOKEN_PATH:}
+    refresh-token-file: ${KIRO_REFRESH_TOKEN_PATH:}
+    refresh-url: ${KIRO_REFRESH_URL:https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken}
+    min-refresh-interval-seconds: ${KIRO_REFRESH_MIN_INTERVAL:5}
+
+server:
+  port: 7860
+
