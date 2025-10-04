@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: claude-kiro-e2e-test
+
+  # 启用完整的应用上下文进行E2E测试
+  main:
+    allow-bean-definition-overriding: true
+
+  # 配置日志级别
+  logging:
+    level:
+      root: INFO
+      org.yanhuang.ai: DEBUG
+      org.springframework.web.reactive.function.client: DEBUG
+      org.yanhuang.ai.e2e: DEBUG
+      reactor.netty: INFO
+
+# 应用配置 - 使用环境变量或默认值
+app:
+  api-key: ${CLAUDE_API_KEY:test-api-key-12345}
+  anthropic-version: "2023-06-01"
+  kiro:
+    base-url: ${KIRO_BASE_URL:http://localhost:8080}
+    profile-arn: ${KIRO_PROFILE_ARN:arn:aws:codewhisperer:us-east-1:123456789012:profile/test-profile}
+    access-token: ${KIRO_ACCESS_TOKEN:}
+    refresh-token: ${KIRO_REFRESH_TOKEN:}
+    access-token-file: ${KIRO_ACCESS_TOKEN_FILE:}
+    refresh-token-file: ${KIRO_REFRESH_TOKEN_FILE:}
+    refresh-url: ${KIRO_REFRESH_URL:http://localhost:8080/refresh-token}
+    min-refresh-interval-seconds: 5
+
+# E2E测试特定配置
+e2e:
+  max-calls-per-batch: 5
+  timeout-seconds: 30
+  retry-attempts: 2
+  state-file-path: "target/e2e-test-state.json"
+  enable-call-tracking: true
+  skip-tests-on-quota-exceeded: true
+
+# 服务器配置 - E2E测试需要连接到实际运行的应用程序
+server:
+  port: 7860
+
+# 测试配置
+test:
+  # WebTestClient配置
+  webclient:
+    timeout: 30s
+    response-timeout: 30s

@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import org.yanhuang.ai.config.AppProperties;
 import org.yanhuang.ai.model.AnthropicChatRequest;
@@ -73,6 +74,9 @@ public class KiroService {
 
     private Mono<List<JsonNode>> callKiroEvents(AnthropicChatRequest request) {
         ObjectNode payload = buildKiroPayload(request);
+        log.info("Sending request to Kiro API: {}", properties.getKiro().getBaseUrl());
+        log.info("Payload: {}", payload.toString());
+        log.info("Using Profile ARN: {}", properties.getKiro().getProfileArn());
 
         return webClient.post()
             .header("Authorization", "Bearer " + tokenManager.ensureToken())
@@ -84,17 +88,27 @@ public class KiroService {
             .map(eventParser::parse)
             .timeout(Duration.ofSeconds(120))
             .onErrorResume(error -> {
-                log.error("kiro api call failed", error);
-                String refreshed = tokenManager.refreshIfNeeded();
-                return webClient.post()
-                    .header("Authorization", "Bearer " + tokenManager.ensureToken())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .bodyValue(payload)
-                    .retrieve()
-                    .bodyToMono(byte[].class)
-                    .map(eventParser::parse)
-                    .timeout(Duration.ofSeconds(120));
+                log.error("Kiro API call failed. Status: {}, Error: {}",
+                    error instanceof WebClientResponseException ?
+                    ((WebClientResponseException) error).getStatusCode() : "Unknown",
+                    error.getMessage());
+                if (error instanceof WebClientResponseException) {
+                    WebClientResponseException webEx = (WebClientResponseException) error;
+                    log.error("Response body: {}", webEx.getResponseBodyAsString());
+                }
+                return tokenManager.refreshIfNeeded()
+                    .flatMap(refreshed -> {
+                        log.info("Retrying with refreshed token...");
+                        return webClient.post()
+                            .header("Authorization", "Bearer " + tokenManager.ensureToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.TEXT_EVENT_STREAM)
+                            .bodyValue(payload)
+                            .retrieve()
+                            .bodyToMono(byte[].class)
+                            .map(eventParser::parse)
+                            .timeout(Duration.ofSeconds(120));
+                    });
             });
     }
 
@@ -105,21 +119,9 @@ public class KiroService {
 
         ObjectNode currentMessage = mapper.createObjectNode();
         ObjectNode userInput = mapper.createObjectNode();
-        userInput.put("origin", "ANTHROPIC_API");
-        userInput.put("modelId", mapModel(request.getModel()));
         userInput.put("content", buildCurrentMessageContent(request));
-        if (request.getMaxTokens() != null) {
-            userInput.put("maxTokens", request.getMaxTokens());
-        }
-        if (request.getTemperature() != null) {
-            userInput.put("temperature", request.getTemperature());
-        }
-        if (request.getTopP() != null) {
-            userInput.put("topP", request.getTopP());
-        }
-        if (request.getTopK() != null) {
-            userInput.put("topK", request.getTopK());
-        }
+        userInput.put("modelId", mapModel(request.getModel()));
+        userInput.put("origin", "AI_EDITOR");
 
         if (!CollectionUtils.isEmpty(request.getTools())) {
             ObjectNode context = mapper.createObjectNode();
@@ -165,16 +167,16 @@ public class KiroService {
             });
         }
 
+        // Only process the last message (current one)
         if (!CollectionUtils.isEmpty(request.getMessages())) {
-            request.getMessages().forEach(message -> {
-                if (!CollectionUtils.isEmpty(message.getContent())) {
-                    message.getContent().forEach(block -> {
-                        if ("text".equalsIgnoreCase(block.getType())) {
-                            segments.add("[" + message.getRole() + "] " + block.getText());
-                        }
-                    });
-                }
-            });
+            AnthropicMessage lastMessage = request.getMessages().get(request.getMessages().size() - 1);
+            if (!CollectionUtils.isEmpty(lastMessage.getContent())) {
+                lastMessage.getContent().forEach(block -> {
+                    if ("text".equalsIgnoreCase(block.getType())) {
+                        segments.add("[" + lastMessage.getRole() + "] " + block.getText());
+                    }
+                });
+            }
         }
         return String.join("\n", segments);
     }
@@ -235,18 +237,21 @@ public class KiroService {
 
     private ArrayNode buildHistory(AnthropicChatRequest request) {
         ArrayNode history = mapper.createArrayNode();
-        if (CollectionUtils.isEmpty(request.getMessages())) {
+        if (CollectionUtils.isEmpty(request.getMessages()) || request.getMessages().size() <= 1) {
             return history;
         }
 
-        request.getMessages().forEach(message -> {
+        // Exclude the last message (current one) from history
+        List<AnthropicMessage> historicalMessages = request.getMessages().subList(0, request.getMessages().size() - 1);
+
+        historicalMessages.forEach(message -> {
             String content = buildMessageContent(message);
             if ("user".equalsIgnoreCase(message.getRole())) {
                 ObjectNode userNode = mapper.createObjectNode();
                 userNode.set("userInputMessage", mapper.createObjectNode()
                     .put("content", content)
                     .put("modelId", mapModel(request.getModel()))
-                    .put("origin", "ANTHROPIC_API"));
+                    .put("origin", "AI_EDITOR"));
                 history.add(userNode);
             } else if ("assistant".equalsIgnoreCase(message.getRole())) {
                 ObjectNode assistantNode = mapper.createObjectNode();
@@ -266,6 +271,10 @@ public class KiroService {
         StringBuilder builder = new StringBuilder();
         message.getContent().forEach(block -> {
             if ("text".equalsIgnoreCase(block.getType())) {
+                // Add role prefix for user messages
+                if ("user".equalsIgnoreCase(message.getRole())) {
+                    builder.append("[user] ");
+                }
                 builder.append(block.getText());
             } else if ("tool_use".equalsIgnoreCase(block.getType())) {
                 builder.append("[Called ")
@@ -437,8 +446,9 @@ public class KiroService {
     private String mapModel(String modelId) {
         return switch (modelId) {
             case "claude-sonnet-4-5-20250929" -> "CLAUDE_SONNET_4_5_20250929_V1_0";
-            case "claude-3-5-haiku-20241022" -> "CLAUDE_3_7_SONNET_20250219_V1_0";
-            default -> "CLAUDE_SONNET_4_5_20250929_V1_0";
+            case "claude-3-5-sonnet-20241022" -> "CLAUDE_3_5_SONNET_20241022_V1_0";
+            case "claude-3-5-haiku-20241022" -> "auto";
+            default -> "CLAUDE_3_5_SONNET_20241022_V1_0";
         };
     }
 
