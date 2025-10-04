@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn test:*)",
+      "Bash(echo:*)",
+      "Bash(\"$JAVA21_HOME/bin/java\":*)",
+      "Bash(set:*)",
+      "Bash($env:JAVA_HOME = $env:JAVA21_HOME)",
+      "Bash($env:PATH = \"$env:JAVA21_HOME\\bin;$env:PATH\")",
+      "Bash(mvn:*)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=AnthropicControllerTest)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test-compile)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=AnthropicControllerTest -q)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=KiroServiceTest -q)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=KiroServiceTest)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn:*)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=TokenManagerTest)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=TokenManagerSimpleTest)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=CodeWhispererEventParserTest)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test:*)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=\"*parser*\")",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=\"**/parser/*Test\")",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=AnthropicApiIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false)",
+      "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test)"
+    ],
+    "additionalDirectories": [
+      "d:\\code\\tools\\ki2api\\"
+    ]
+  }
+}

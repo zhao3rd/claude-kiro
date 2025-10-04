@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: claude-kiro-test
+
+  # Disable actuator endpoints for tests
+  main:
+    allow-bean-definition-overriding: true
+
+logging:
+  level:
+    root: WARN
+    org.yanhuang.ai: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+
+app:
+  api-key: "test-api-key-12345"
+  anthropic-version: "2023-06-01"
+  kiro:
+    base-url: "http://localhost:8089"
+    profile-arn: "arn:aws:codewhisperer:us-east-1:123456789012:profile/test-profile"
+    access-token: "test-access-token"
+    refresh-token: "test-refresh-token"
+    access-token-file: ""
+    refresh-token-file: ""
+    refresh-url: "http://localhost:8089/refresh-token"
+    min-refresh-interval-seconds: 1
+
+server:
+  port: 0

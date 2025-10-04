@@ -1,0 +1,101 @@
+{
+  "validChatRequest": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 100,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello, how are you?"
+          }
+        ]
+      }
+    ],
+    "temperature": 0.7,
+    "stream": false
+  },
+  "validStreamRequest": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 100,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Tell me a story"
+          }
+        ]
+      }
+    ],
+    "temperature": 0.7,
+    "stream": true
+  },
+  "toolCallRequest": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 100,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What's the weather like in New York?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get current weather information for a location",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "The city and state, e.g. San Francisco, CA"
+              },
+              "unit": {
+                "type": "string",
+                "enum": ["celsius", "fahrenheit"]
+              }
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto"
+  },
+  "mockKiroEvents": [
+    {
+      "content": "Hello! I'm doing well, thank you for asking."
+    },
+    {
+      "content": " How can I assist you today?"
+    }
+  ],
+  "mockToolCallEvents": [
+    {
+      "content": "I'll check the weather for you."
+    },
+    {
+      "name": "get_weather",
+      "toolUseId": "toolu_12345",
+      "input": "{\"location\":\"New York, NY\",\"unit\":\"fahrenheit\"}"
+    },
+    {
+      "name": "get_weather",
+      "toolUseId": "toolu_12345",
+      "input": "}",
+      "stop": true
+    }
+  ],
+  "mockBracketToolCallText": "[Called get_weather with args: {\"location\":\"New York, NY\",\"unit\":\"fahrenheit\"}]",
+  "multipleToolCallsText": "[Called get_weather with args: {\"location\":\"New York\"}] [Called get_time with args: {\"timezone\":\"EST\"}]"
+}

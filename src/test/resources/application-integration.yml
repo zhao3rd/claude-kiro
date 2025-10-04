@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: claude-kiro-integration
+
+logging:
+  level:
+    root: INFO
+    org.yanhuang.ai: INFO
+    org.springframework.web.reactive.function.client: INFO
+
+app:
+  api-key: "integration-test-key"
+  anthropic-version: "2023-06-01"
+  kiro:
+    base-url: "http://localhost:8888"
+    profile-arn: "arn:aws:codewhisperer:us-east-1:123456789012:profile/integration-profile"
+    access-token: "integration-access-token"
+    refresh-token: "integration-refresh-token"
+    refresh-url: "http://localhost:8888/refresh-token"
+    min-refresh-interval-seconds: 2
+
+server:
+  port: 0
