@@ -128,10 +128,25 @@ public class KiroService {
             ArrayNode toolsNode = mapper.createArrayNode();
             request.getTools().forEach(tool -> {
                 ObjectNode specNode = mapper.createObjectNode();
-                specNode.set("toolSpecification", mapper.createObjectNode()
-                    .put("name", tool.getName())
-                    .put("description", tool.getDescription())
-                    .set("inputSchema", mapper.createObjectNode().set("json", mapper.valueToTree(tool.getInputSchema()))));
+                ObjectNode toolSpec = mapper.createObjectNode();
+
+                // Use effective methods to handle both direct and Anthropic function format
+                String effectiveName = tool.getEffectiveName();
+                String effectiveDescription = tool.getEffectiveDescription();
+                Map<String, Object> effectiveInputSchema = tool.getEffectiveInputSchema();
+
+                // Only add non-null values to avoid null fields in JSON
+                if (effectiveName != null) {
+                    toolSpec.put("name", effectiveName);
+                }
+                if (effectiveDescription != null) {
+                    toolSpec.put("description", effectiveDescription);
+                }
+                if (effectiveInputSchema != null) {
+                    toolSpec.set("inputSchema", mapper.createObjectNode().set("json", mapper.valueToTree(effectiveInputSchema)));
+                }
+
+                specNode.set("toolSpecification", toolSpec);
                 toolsNode.add(specNode);
             });
             context.set("tools", toolsNode);
@@ -250,7 +265,7 @@ public class KiroService {
                 ObjectNode userNode = mapper.createObjectNode();
                 userNode.set("userInputMessage", mapper.createObjectNode()
                     .put("content", content)
-                    .put("modelId", mapModel(request.getModel()))
+                    .put("modelId", "auto")
                     .put("origin", "AI_EDITOR"));
                 history.add(userNode);
             } else if ("assistant".equalsIgnoreCase(message.getRole())) {
@@ -446,9 +461,9 @@ public class KiroService {
     private String mapModel(String modelId) {
         return switch (modelId) {
             case "claude-sonnet-4-5-20250929" -> "CLAUDE_SONNET_4_5_20250929_V1_0";
-            case "claude-3-5-sonnet-20241022" -> "CLAUDE_3_5_SONNET_20241022_V1_0";
+            case "claude-3-5-sonnet-20241022" -> "auto";
             case "claude-3-5-haiku-20241022" -> "auto";
-            default -> "CLAUDE_3_5_SONNET_20241022_V1_0";
+            default -> "auto";
         };
     }
 

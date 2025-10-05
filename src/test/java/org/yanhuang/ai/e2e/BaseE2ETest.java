@@ -91,7 +91,7 @@ public abstract class BaseE2ETest {
      */
     protected ObjectNode createBasicChatRequest(String message) {
         ObjectNode request = objectMapper.createObjectNode();
-        request.put("model", "claude-3-5-haiku-20241022");
+        request.put("model", "claude-sonnet-4-5-20250929");
         request.put("max_tokens", 1000);
 
         ArrayNode messages = objectMapper.createArrayNode();
@@ -146,7 +146,7 @@ public abstract class BaseE2ETest {
      */
     protected ObjectNode createMultiRoundRequest(String... messages) {
         ObjectNode request = objectMapper.createObjectNode();
-        request.put("model", "claude-3-5-haiku-20241022");
+        request.put("model", "claude-sonnet-4-5-20250929");
         request.put("max_tokens", 1000);
 
         ArrayNode messageArray = objectMapper.createArrayNode();
