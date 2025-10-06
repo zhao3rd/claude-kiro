@@ -3,6 +3,7 @@ package org.yanhuang.ai.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -206,21 +207,84 @@ public class KiroService {
         StringBuilder contentBuilder = new StringBuilder();
         List<ToolCall> toolCalls = new ArrayList<>();
 
-        for (JsonNode event : events) {
+        // Track tool calls being built from streaming events
+        Map<String, ToolCallBuilder> toolCallBuilders = new HashMap<>();
+
+        log.debug("=== Parsing {} events from Kiro response ===", events.size());
+        for (int i = 0; i < events.size(); i++) {
+            JsonNode event = events.get(i);
+            log.debug("Event {}: {}", i, event.toPrettyString());
+
+            // Handle text content
             if (event.hasNonNull("content")) {
-                contentBuilder.append(event.get("content").asText());
+                String content = event.get("content").asText();
+                contentBuilder.append(content);
+                log.debug("Event {} content: {}", i, content);
             }
+
+            // Handle tool use events from Kiro
+            if (event.hasNonNull("name") && event.hasNonNull("toolUseId")) {
+                String toolUseId = event.get("toolUseId").asText();
+                String name = event.get("name").asText();
+
+                log.debug("Event {} has tool event: name={}, toolUseId={}", i, name, toolUseId);
+
+                // Initialize or update tool call builder
+                ToolCallBuilder builder = toolCallBuilders.computeIfAbsent(toolUseId,
+                    id -> {
+                        log.debug("Creating new ToolCallBuilder for {}", id);
+                        return new ToolCallBuilder(id, name);
+                    });
+
+                // Append input chunks if present
+                if (event.hasNonNull("input")) {
+                    String input = event.get("input").asText();
+                    builder.appendInput(input);
+                    log.debug("Event {} appending input for {}: {}", i, name, input);
+                }
+
+                // Check if this is the final event for this tool call
+                if (event.hasNonNull("stop")) {
+                    boolean stopValue = event.get("stop").asBoolean();
+                    log.debug("Event {} has stop field: {}", i, stopValue);
+                    if (stopValue) {
+                        ToolCall toolCall = builder.build();
+                        toolCalls.add(toolCall);
+                        log.info("Completed tool call from Kiro events: {} with args: {}",
+                            name, builder.getInputBuilder().toString());
+                    }
+                } else {
+                    log.debug("Event {} does not have stop field", i);
+                }
+            }
+
+            // Fallback: Handle legacy toolCalls field format
             if (event.hasNonNull("toolCalls")) {
+                log.info("Event {} has toolCalls field", i);
                 event.get("toolCalls").forEach(callNode -> {
                     ToolCall call = mapper.convertValue(callNode, ToolCall.class);
                     toolCalls.add(call);
+                    log.info("Added tool call from toolCalls: {}", call.getFunction().getName());
                 });
             }
+
+            // Fallback: Parse bracket format from rawText
             if (event.hasNonNull("rawText")) {
-                List<ToolCall> bracketCalls = bracketToolCallParser.parse(event.get("rawText").asText());
-                toolCalls.addAll(bracketCalls);
+                String rawText = event.get("rawText").asText();
+                log.debug("Event {} rawText: {}", i, rawText);
+                List<ToolCall> bracketCalls = bracketToolCallParser.parse(rawText);
+                if (bracketCalls != null && !bracketCalls.isEmpty()) {
+                    log.info("Parsed {} tool calls from bracket format in event {}", bracketCalls.size(), i);
+                    for (ToolCall call : bracketCalls) {
+                        log.info("  Tool call: {}", call.getFunction().getName());
+                    }
+                    toolCalls.addAll(bracketCalls);
+                } else {
+                    log.debug("No bracket format tool calls found in event {}", i);
+                }
             }
         }
+        log.debug("=== Total tool calls found: {} ===", toolCalls.size());
 
         List<ToolCall> uniqueToolCalls = toolCallDeduplicator.deduplicate(toolCalls);
 
@@ -465,6 +529,40 @@ public class KiroService {
             case "claude-3-5-haiku-20241022" -> "auto";
             default -> "auto";
         };
+    }
+
+    // Helper class to build tool calls from streaming events
+    private static class ToolCallBuilder {
+        private final String id;
+        private final String name;
+        private final StringBuilder inputBuilder;
+
+        ToolCallBuilder(String id, String name) {
+            this.id = id;
+            this.name = name;
+            this.inputBuilder = new StringBuilder();
+        }
+
+        void appendInput(String input) {
+            inputBuilder.append(input);
+        }
+
+        StringBuilder getInputBuilder() {
+            return inputBuilder;
+        }
+
+        ToolCall build() {
+            ToolCall call = new ToolCall();
+            call.setId(id);
+            call.setType("function");
+
+            ToolCall.ToolFunction function = new ToolCall.ToolFunction();
+            function.setName(name);
+            function.setArguments(inputBuilder.toString());
+            call.setFunction(function);
+
+            return call;
+        }
     }
 
 }

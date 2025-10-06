@@ -13,6 +13,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 如果原代码使用英文注释，继续使用英文
   - 日志输出语言保持与原有代码一致
 
+## 环境信息
+### Java 21在环境变量JAVA21_HOME中，不需要重新下载。
+### mvn在当前PATH中。
+
 ## Project Overview
 
 claude-kiro is a Spring Boot WebFlux application that provides an Anthropic Claude-compatible API backed by Kiro CodeWhisperer gateway. It translates Anthropic API requests to Kiro's internal format and handles streaming responses.

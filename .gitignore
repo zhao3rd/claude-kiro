@@ -68,3 +68,6 @@ Desktop.ini
 # Java specific
 *.hprof
 .factorypath
+
+jdk-21/
+jdk21.zip
