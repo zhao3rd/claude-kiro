@@ -87,9 +87,9 @@ public class ClaudeApiClient {
         streamRequest.put("stream", true);
 
         return webClient.post()
-                .uri("/v1/messages")
+                .uri("/v1/messages/stream")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(streamRequest)
+                .bodyValue(request)  // 不需要添加stream字段，直接使用原请求
                 .retrieve()
                 .bodyToFlux(String.class)
                 .timeout(Duration.ofSeconds(timeoutSeconds))

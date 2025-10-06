@@ -257,6 +257,11 @@ public class PerformanceAndStressE2ETest extends BaseE2ETest {
                     .expectNextMatches(event -> event.has("type"))
                     .expectNextMatches(event -> event.has("type"))
                     .expectNextMatches(event -> event.has("type"))
+                    // 消费剩余的所有事件
+                    .thenConsumeWhile(event -> {
+                        log.debug("额外性能测试事件: {}", event);
+                        return true;
+                    })
                     .expectComplete()
                     .verify(Duration.ofSeconds(config.getTimeoutSeconds()));
 
@@ -327,6 +332,8 @@ public class PerformanceAndStressE2ETest extends BaseE2ETest {
 
                     StepVerifier.create(apiClient.createChatCompletionStream(request2))
                             .expectNextCount(3)
+                            // 消费剩余的所有事件
+                            .thenConsumeWhile(event -> true)
                             .expectComplete()
                             .verify(Duration.ofSeconds(config.getTimeoutSeconds()));
 

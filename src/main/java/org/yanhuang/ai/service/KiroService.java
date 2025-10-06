@@ -68,9 +68,24 @@ public class KiroService {
     }
 
     public Flux<String> streamCompletion(AnthropicChatRequest request) {
+        log.info("=== Starting stream completion ===");
         return callKiroEvents(request)
-            .map(events -> mapResponse(events, request))
-            .flatMapMany(response -> Flux.fromIterable(buildStreamEvents(response)));
+            .map(events -> {
+                log.info("=== Map events to response ===");
+                AnthropicChatResponse response = mapResponse(events, request);
+                log.info("Response has {} content blocks", response.getContent() != null ? response.getContent().size() : 0);
+                log.info("Stop reason: {}", response.getStopReason());
+                return response;
+            })
+            .flatMapMany(response -> {
+                log.info("=== Building stream events ===");
+                List<String> events = buildStreamEvents(response);
+                log.info("Built {} stream events", events.size());
+                for (int i = 0; i < events.size(); i++) {
+                    log.info("Stream event {}: {}", i, events.get(i));
+                }
+                return Flux.fromIterable(events);
+            });
     }
 
     private Mono<List<JsonNode>> callKiroEvents(AnthropicChatRequest request) {
@@ -86,7 +101,14 @@ public class KiroService {
             .bodyValue(payload)
             .retrieve()
             .bodyToMono(byte[].class)
-            .map(eventParser::parse)
+            .map(bytes -> {
+                List<JsonNode> events = eventParser.parse(bytes);
+                log.info("Parsed {} events from Kiro response", events.size());
+                for (int i = 0; i < events.size(); i++) {
+                    log.info("Event {}: {}", i, events.get(i).toString());
+                }
+                return events;
+            })
             .timeout(Duration.ofSeconds(120))
             .onErrorResume(error -> {
                 log.error("Kiro API call failed. Status: {}, Error: {}",

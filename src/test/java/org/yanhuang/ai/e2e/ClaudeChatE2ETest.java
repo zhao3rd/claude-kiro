@@ -187,6 +187,11 @@ public class ClaudeChatE2ETest extends BaseE2ETest {
                         return "message_delta".equals(event.get("type").asText()) ||
                                "message_stop".equals(event.get("type").asText());
                     })
+                    // 消费剩余的所有事件
+                    .thenConsumeWhile(event -> {
+                        log.debug("额外流式事件: {}", event);
+                        return true;
+                    })
                     .expectComplete()
                     .verify(Duration.ofSeconds(config.getTimeoutSeconds()));
 

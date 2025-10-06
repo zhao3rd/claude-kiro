@@ -126,3 +126,6 @@ Current model mappings (defined in `KiroService.mapModel()`):
 - `model/` - Request/response DTOs
 - `parser/` - Event parsing and tool call extraction
 - `config/` - Configuration properties and WebClient setup
+- 对于需要访问Kiro CodeWhisperer gateway的集成测试,直接运行主程序,不要使用mock
+- Kiro CodeWhisperer gateway返回的响应多打印日志以便问题排查
+- 每次运行e2e测试前注意检查主程序是否已经在后台运行，如果没有运行，则要在后台运行起来
