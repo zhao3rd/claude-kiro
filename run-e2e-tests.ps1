@@ -45,7 +45,7 @@ $optionalEnvVars = @(
 
 $missingVars = @()
 foreach ($var in $requiredEnvVars) {
-    if ([string]::IsNullOrEmpty($env:$var)) {
+    if ([string]::IsNullOrEmpty((Get-Variable -Name "env:$var" -ErrorAction SilentlyContinue).Value)) {
         $missingVars += $var
     } else {
         Write-Host "✅ $var = [已设置]" -ForegroundColor Green
@@ -63,7 +63,7 @@ if ($missingVars.Count -gt 0) {
 
 # 显示可选环境变量状态
 foreach ($var in $optionalEnvVars) {
-    if ([string]::IsNullOrEmpty($env:$var)) {
+    if ([string]::IsNullOrEmpty((Get-Variable -Name "env:$var" -ErrorAction SilentlyContinue).Value)) {
         Write-Host "⚠️  $var = [未设置 - 使用默认值]" -ForegroundColor Yellow
     } else {
         Write-Host "✅ $var = [已设置]" -ForegroundColor Green
