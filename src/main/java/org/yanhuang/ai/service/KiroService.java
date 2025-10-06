@@ -310,19 +310,32 @@ public class KiroService {
 
         List<ToolCall> uniqueToolCalls = toolCallDeduplicator.deduplicate(toolCalls);
 
+        // Determine stop_reason based on response characteristics
+        String stopReason = determineStopReason(events, uniqueToolCalls, contentBuilder, request);
+        response.setStopReason(stopReason);
+
+        // Check for stop sequences in content
+        if ("stop_sequence".equals(stopReason) && request.getStopSequences() != null) {
+            for (String seq : request.getStopSequences()) {
+                if (contentBuilder.toString().contains(seq)) {
+                    response.setStopSequence(seq);
+                    break;
+                }
+            }
+        }
+
         if (uniqueToolCalls.isEmpty()) {
             AnthropicMessage.ContentBlock block = new AnthropicMessage.ContentBlock();
             block.setType("text");
             block.setText(contentBuilder.toString());
             response.addContentBlock(block);
-            response.setStopReason("end_turn");
         } else {
-            response.setStopReason("tool_use");
             uniqueToolCalls.forEach(call -> {
                 AnthropicMessage.ContentBlock block = new AnthropicMessage.ContentBlock();
                 block.setType("tool_use");
                 block.setName(call.getFunction().getName());
-                block.setId(call.getId() != null ? call.getId() : "tool_" + UUID.randomUUID().toString().replace("-", ""));
+                // Use Anthropic-compliant tool ID format
+                block.setId(call.getId() != null ? call.getId() : "toolu_" + UUID.randomUUID().toString().replace("-", ""));
                 block.setInput(parseArguments(call.getFunction().getArguments()));
                 response.addContentBlock(block);
             });
@@ -383,9 +396,34 @@ public class KiroService {
                     .append(" with args: ")
                     .append(block.getInput())
                     .append("]");
+            } else if ("tool_result".equalsIgnoreCase(block.getType())) {
+                // Handle tool result - include in message content for Kiro
+                builder.append("[Tool ")
+                    .append(block.getToolUseId())
+                    .append(" returned: ")
+                    .append(serializeToolResult(block.getContent()))
+                    .append("]");
             }
         });
         return builder.toString();
+    }
+
+    /**
+     * Serialize tool result content to string format
+     */
+    private String serializeToolResult(Object content) {
+        if (content == null) {
+            return "null";
+        }
+        if (content instanceof String) {
+            return (String) content;
+        }
+        try {
+            return mapper.writeValueAsString(content);
+        } catch (Exception ex) {
+            log.error("Failed to serialize tool result", ex);
+            return content.toString();
+        }
     }
 
     private int estimateTokens(AnthropicChatRequest request) {
@@ -421,6 +459,69 @@ public class KiroService {
             log.error("Failed to parse tool arguments", ex);
             return Map.of();
         }
+    }
+
+    /**
+     * Determine stop_reason based on response characteristics
+     * Anthropic API supports: end_turn, max_tokens, stop_sequence, tool_use, content_filter
+     */
+    private String determineStopReason(List<JsonNode> events, List<ToolCall> toolCalls,
+                                      StringBuilder contentBuilder, AnthropicChatRequest request) {
+        // Priority 1: Tool use
+        if (!toolCalls.isEmpty()) {
+            return "tool_use";
+        }
+
+        // Priority 2: Check for explicit stop indicators in events
+        for (JsonNode event : events) {
+            // Check for content filter or moderation flags
+            if (event.hasNonNull("contentFilter") || event.hasNonNull("moderation")) {
+                boolean filtered = event.path("contentFilter").asBoolean(false) ||
+                                 event.path("moderation").asBoolean(false);
+                if (filtered) {
+                    return "content_filter";
+                }
+            }
+
+            // Check for explicit finish reason from Kiro
+            if (event.hasNonNull("finishReason")) {
+                String kiroFinishReason = event.get("finishReason").asText();
+                // Map Kiro finish reasons to Anthropic format
+                switch (kiroFinishReason.toLowerCase()) {
+                    case "max_tokens":
+                    case "length":
+                        return "max_tokens";
+                    case "stop_sequence":
+                    case "stop":
+                        return "stop_sequence";
+                    case "content_filter":
+                    case "filtered":
+                        return "content_filter";
+                    default:
+                        break;
+                }
+            }
+        }
+
+        // Priority 3: Check for stop sequences in content
+        if (request.getStopSequences() != null && !request.getStopSequences().isEmpty()) {
+            String content = contentBuilder.toString();
+            for (String seq : request.getStopSequences()) {
+                if (content.contains(seq)) {
+                    return "stop_sequence";
+                }
+            }
+        }
+
+        // Priority 4: Estimate if max_tokens was reached
+        int estimatedOutputTokens = estimateTokens(contentBuilder.toString());
+        if (request.getMaxTokens() != null && estimatedOutputTokens >= request.getMaxTokens() - 10) {
+            // Allow small margin for token estimation inaccuracy
+            return "max_tokens";
+        }
+
+        // Default: Normal completion
+        return "end_turn";
     }
 
     private ObjectNode convertToolChoice(Map<String, Object> toolChoice) {
@@ -479,19 +580,23 @@ public class KiroService {
                 AnthropicMessage.ContentBlock block = contentBlocks.get(index);
                 String blockType = block.getType();
 
+                // Send content_block_start event
                 ObjectNode blockStart = mapper.createObjectNode();
                 blockStart.put("type", "content_block_start");
                 blockStart.put("index", index);
                 ObjectNode blockNode = mapper.createObjectNode();
                 blockNode.put("type", blockType);
                 if ("tool_use".equals(blockType)) {
+                    // For tool_use, only include id and name in start event (no input yet)
                     blockNode.put("id", block.getId());
                     blockNode.put("name", block.getName());
-                    blockNode.set("input", mapper.valueToTree(block.getInput()));
+                } else if ("text".equals(blockType)) {
+                    blockNode.put("text", "");
                 }
                 blockStart.set("content_block", blockNode);
                 events.add(toSseEvent("content_block_start", blockStart));
 
+                // Send content_block_delta event(s)
                 if ("text".equals(blockType)) {
                     ObjectNode delta = mapper.createObjectNode();
                     delta.put("type", "content_block_delta");
@@ -501,8 +606,23 @@ public class KiroService {
                     deltaNode.put("text", block.getText() != null ? block.getText() : "");
                     delta.set("delta", deltaNode);
                     events.add(toSseEvent("content_block_delta", delta));
+                } else if ("tool_use".equals(blockType)) {
+                    // For tool_use, stream the input as JSON deltas
+                    String inputJson = serializeToolInput(block.getInput());
+                    List<String> jsonChunks = chunkJsonString(inputJson);
+                    for (String chunk : jsonChunks) {
+                        ObjectNode delta = mapper.createObjectNode();
+                        delta.put("type", "content_block_delta");
+                        delta.put("index", index);
+                        ObjectNode deltaNode = mapper.createObjectNode();
+                        deltaNode.put("type", "input_json_delta");
+                        deltaNode.put("partial_json", chunk);
+                        delta.set("delta", deltaNode);
+                        events.add(toSseEvent("content_block_delta", delta));
+                    }
                 }
 
+                // Send content_block_stop event
                 ObjectNode blockStop = mapper.createObjectNode();
                 blockStop.put("type", "content_block_stop");
                 blockStop.put("index", index);
@@ -542,6 +662,50 @@ public class KiroService {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize SSE payload", e);
         }
+    }
+
+    /**
+     * Serialize tool input Map to JSON string
+     */
+    private String serializeToolInput(Map<String, Object> input) {
+        if (input == null || input.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return mapper.writeValueAsString(input);
+        } catch (Exception ex) {
+            log.error("Failed to serialize tool input", ex);
+            return "{}";
+        }
+    }
+
+    /**
+     * Chunk JSON string for streaming as partial_json deltas
+     * Anthropic API requires valid JSON fragments in each chunk
+     */
+    private List<String> chunkJsonString(String json) {
+        List<String> chunks = new ArrayList<>();
+        if (json == null || json.isEmpty()) {
+            return chunks;
+        }
+
+        // Simple chunking strategy: split at reasonable boundaries
+        // For production, could be more sophisticated to ensure valid JSON fragments
+        int chunkSize = 50; // Characters per chunk
+        int length = json.length();
+
+        for (int i = 0; i < length; i += chunkSize) {
+            int end = Math.min(i + chunkSize, length);
+            String chunk = json.substring(i, end);
+            chunks.add(chunk);
+        }
+
+        // If only one small chunk, return it directly
+        if (chunks.isEmpty()) {
+            chunks.add(json);
+        }
+
+        return chunks;
     }
 
     private String mapModel(String modelId) {

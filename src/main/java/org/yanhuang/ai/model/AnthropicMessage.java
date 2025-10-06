@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.DeserializationContext;
@@ -41,9 +42,16 @@ public class AnthropicMessage {
     public static class ContentBlock {
         private String type;
         private String text;
+
+        // tool_use fields
         private String id;
         private String name;
         private Map<String, Object> input;
+
+        // tool_result fields
+        @JsonProperty("tool_use_id")
+        private String toolUseId;
+        private Object content;  // Can be string or complex object
 
         public String getType() {
             return type;
@@ -83,6 +91,22 @@ public class AnthropicMessage {
 
         public void setInput(Map<String, Object> input) {
             this.input = input;
+        }
+
+        public String getToolUseId() {
+            return toolUseId;
+        }
+
+        public void setToolUseId(String toolUseId) {
+            this.toolUseId = toolUseId;
+        }
+
+        public Object getContent() {
+            return content;
+        }
+
+        public void setContent(Object content) {
+            this.content = content;
         }
     }
 
