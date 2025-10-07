@@ -39,6 +39,7 @@ public class AnthropicMessage {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class ContentBlock {
         private String type;
         private String text;
@@ -55,6 +56,10 @@ public class AnthropicMessage {
 
         // image fields
         private ImageSource source;
+
+        // optional cache control hints from clients (e.g., {"type":"ephemeral"})
+        @com.fasterxml.jackson.annotation.JsonProperty("cache_control")
+        private java.util.Map<String, Object> cacheControl;
 
         public String getType() {
             return type;
@@ -118,6 +123,14 @@ public class AnthropicMessage {
 
         public void setContent(Object content) {
             this.content = content;
+        }
+
+        public java.util.Map<String, Object> getCacheControl() {
+            return cacheControl;
+        }
+
+        public void setCacheControl(java.util.Map<String, Object> cacheControl) {
+            this.cacheControl = cacheControl;
         }
     }
 

@@ -61,7 +61,7 @@ class AnthropicControllerTest {
                 .thenReturn(Mono.just(mockResponse));
 
         // When & Then
-        Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
+        Object result = controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
 
         assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
         @SuppressWarnings("unchecked")
@@ -89,7 +89,7 @@ class AnthropicControllerTest {
                 .thenReturn(mockStream);
 
         // When & Then
-        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
+        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", null, "2023-06-01", request);
 
         StepVerifier.create(result.getBody())
                 .expectNext("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"role\":\"assistant\"}}\n\n")
@@ -106,7 +106,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalStateException.class, () -> {
-            controller.createMessage("invalid-api-key", "2023-06-01", request);
+            controller.createMessage("invalid-api-key", null, "2023-06-01", request);
         });
     }
 
@@ -118,7 +118,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalStateException.class, () -> {
-            controller.createMessage(null, "2023-06-01", request);
+            controller.createMessage(null, null, "2023-06-01", request);
         });
     }
 
@@ -130,7 +130,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", null, request);
+            controller.createMessage("test-api-key-12345", null, null, request);
         });
     }
 
@@ -144,7 +144,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -157,7 +157,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -170,7 +170,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -193,7 +193,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -213,7 +213,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -226,7 +226,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.streamMessage("test-api-key-12345", "2023-06-01", request);
+            controller.streamMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -239,7 +239,7 @@ class AnthropicControllerTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class, () -> {
-            controller.createMessage("test-api-key-12345", "2023-06-01", request);
+            controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
         });
     }
 
@@ -253,7 +253,7 @@ class AnthropicControllerTest {
                 .thenReturn(Mono.error(new RuntimeException("Kiro service unavailable")));
 
         // When & Then
-        Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
+        Object result = controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
 
         // Handle both streaming and non-streaming responses
         if (result instanceof Flux) {
@@ -279,7 +279,7 @@ class AnthropicControllerTest {
                 .thenReturn(Flux.error(new RuntimeException("Kiro service error")));
 
         // When & Then
-        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
+        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", null, "2023-06-01", request);
 
         StepVerifier.create(result.getBody())
                 .expectErrorMatches(throwable ->
@@ -299,7 +299,7 @@ class AnthropicControllerTest {
                 .thenReturn(Mono.just(mockResponse));
 
         // When & Then
-        Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
+        Object result = controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
 
         assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
         @SuppressWarnings("unchecked")
@@ -324,7 +324,7 @@ class AnthropicControllerTest {
                 .thenReturn(Mono.just(mockResponse));
 
         // When & Then
-        Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
+        Object result = controller.createMessage("test-api-key-12345", null, "2023-06-01", request);
 
         assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
         @SuppressWarnings("unchecked")

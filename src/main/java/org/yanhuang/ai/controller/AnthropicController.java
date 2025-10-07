@@ -24,9 +24,14 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestController
 @RequestMapping("/v1/messages")
 public class AnthropicController {
+
+    private static final Logger log = LoggerFactory.getLogger(AnthropicController.class);
 
     private final AppProperties properties;
     private final KiroService kiroService;
@@ -43,11 +48,15 @@ public class AnthropicController {
     @PostMapping(produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_EVENT_STREAM_VALUE})
     public Object createMessage(
         @RequestHeader(name = "x-api-key", required = false) String apiKey,
+        @RequestHeader(name = "Authorization", required = false) String authorization,
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
 
-        validateHeaders(apiKey, apiVersion);
+        validateHeaders(resolveApiKey(apiKey, authorization), apiVersion);
         validateRequest(request);
+
+        // Log Claude Code incoming request summary (non-streaming)
+        logClaudeCodeRequest("/v1/messages", request);
 
         String version = StringUtils.hasText(apiVersion) ? apiVersion : properties.getAnthropicVersion();
 
@@ -70,11 +79,15 @@ public class AnthropicController {
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<Flux<String>> streamMessage(
         @RequestHeader(name = "x-api-key", required = false) String apiKey,
+        @RequestHeader(name = "Authorization", required = false) String authorization,
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
 
-        validateHeaders(apiKey, apiVersion);
+        validateHeaders(resolveApiKey(apiKey, authorization), apiVersion);
         validateRequest(request);
+
+        // Log Claude Code incoming request summary (streaming)
+        logClaudeCodeRequest("/v1/messages/stream", request);
 
         Flux<String> sseStream = kiroService.streamCompletion(request)
             .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n");
@@ -90,6 +103,20 @@ public class AnthropicController {
         if (!StringUtils.hasText(apiVersion)) {
             throw new IllegalArgumentException("anthropic-version header is required");
         }
+    }
+
+    private String resolveApiKey(String apiKey, String authorization) {
+        if (StringUtils.hasText(apiKey)) {
+            return apiKey;
+        }
+        if (StringUtils.hasText(authorization)) {
+            // Accept formats: "Bearer sk-..." or raw token value
+            if (authorization.startsWith("Bearer ")) {
+                return authorization.substring(7).trim();
+            }
+            return authorization.trim();
+        }
+        return apiKey; // null
     }
 
     private void validateRequest(AnthropicChatRequest request) {
@@ -210,6 +237,73 @@ public class AnthropicController {
                 // Unknown type
                 throw new IllegalArgumentException("tool_choice.type must be one of: auto, any, tool, none, required");
         }
+    }
+
+    // Log a concise summary of Claude Code request for troubleshooting
+    private void logClaudeCodeRequest(String endpoint, AnthropicChatRequest request) {
+        try {
+            int imageCount = 0;
+            int textCount = 0;
+            StringBuilder textSamples = new StringBuilder();
+
+            if (request.getMessages() != null && !request.getMessages().isEmpty()) {
+                AnthropicMessage last = request.getMessages().get(request.getMessages().size() - 1);
+                if (last.getContent() != null) {
+                    for (AnthropicMessage.ContentBlock cb : last.getContent()) {
+                        if ("image".equalsIgnoreCase(cb.getType())) {
+                            imageCount++;
+                        } else if ("text".equalsIgnoreCase(cb.getType())) {
+                            textCount++;
+                            if (textSamples.length() < 800) {
+                                String t = cb.getText() == null ? "" : cb.getText();
+                                textSamples.append(truncate(t, 400)).append(" | ");
+                            }
+                        }
+                    }
+                }
+            }
+
+            String toolNames = "";
+            if (request.getTools() != null && !request.getTools().isEmpty()) {
+                StringBuilder tn = new StringBuilder();
+                for (ToolDefinition td : request.getTools()) {
+                    String n = td.getEffectiveName();
+                    if (n != null) tn.append(n).append(',');
+                }
+                if (tn.length() > 0) tn.setLength(tn.length() - 1);
+                toolNames = tn.toString();
+            }
+
+            Object choice = request.getToolChoice();
+            String toolChoiceSummary;
+            if (choice instanceof Map<?, ?> m) {
+                String typeStr = String.valueOf(m.get("type"));
+                String nameStr = String.valueOf(m.get("name"));
+                toolChoiceSummary = "type=" + ("null".equals(typeStr) ? "" : typeStr)
+                        + ", name=" + ("null".equals(nameStr) ? "" : nameStr);
+            } else {
+                toolChoiceSummary = String.valueOf(choice);
+            }
+
+            log.info("[ClaudeCode] endpoint={}, model={}, stream={}, images={}, texts={}, tool_choice={}, tools={}, text_samples={}",
+                endpoint,
+                request.getModel(),
+                Boolean.TRUE.equals(request.getStream()),
+                imageCount,
+                textCount,
+                toolChoiceSummary,
+                toolNames,
+                truncate(textSamples.toString(), 800)
+            );
+        } catch (Exception e) {
+            log.warn("[ClaudeCode] failed to log request summary: {}", e.getMessage());
+        }
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        if (s.length() <= max) return s;
+        return s.substring(0, Math.max(0, max - 3)) + "...";
     }
 }
 
