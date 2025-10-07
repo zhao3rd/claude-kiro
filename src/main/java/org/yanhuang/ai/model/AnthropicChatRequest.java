@@ -41,6 +41,8 @@ public class AnthropicChatRequest {
 
     private Map<String, Object> metadata;
 
+    private Map<String, Object> thinking;
+
     public String getModel() {
         return model;
     }
@@ -135,6 +137,14 @@ public class AnthropicChatRequest {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public Map<String, Object> getThinking() {
+        return thinking;
+    }
+
+    public void setThinking(Map<String, Object> thinking) {
+        this.thinking = thinking;
     }
 }
 

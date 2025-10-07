@@ -184,6 +184,13 @@ public class KiroService {
             request.getStopSequences().forEach(stopArray::add);
             userInput.set("stopSequences", stopArray);
         }
+
+        // Add thinking parameter if present (for extended thinking mode)
+        if (request.getThinking() != null && !request.getThinking().isEmpty()) {
+            userInput.set("thinking", mapper.valueToTree(request.getThinking()));
+            log.info("Extended thinking enabled with config: {}", request.getThinking());
+        }
+
         currentMessage.set("userInputMessage", userInput);
 
         conversationState.set("currentMessage", currentMessage);
@@ -327,7 +334,16 @@ public class KiroService {
         if (uniqueToolCalls.isEmpty()) {
             AnthropicMessage.ContentBlock block = new AnthropicMessage.ContentBlock();
             block.setType("text");
-            block.setText(contentBuilder.toString());
+
+            // Add thinking mode warning if requested but not supported
+            String finalText = contentBuilder.toString();
+            if (request.getThinking() != null && !request.getThinking().isEmpty()) {
+                String warning = "[Note: Extended thinking mode is not supported by Kiro Gateway. Response generated in standard mode.]\n\n";
+                finalText = warning + finalText;
+                log.info("Added thinking mode unsupported warning to response");
+            }
+
+            block.setText(finalText);
             response.addContentBlock(block);
         } else {
             uniqueToolCalls.forEach(call -> {
