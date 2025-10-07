@@ -1,6 +1,7 @@
 # Anthropic Claude API 兼容性差异分析报告
 
-**生成日期**: 2025-10-06
+**生成日期**: 2025-10-06  
+**最后更新**: 2025-10-06  
 **项目**: claude-kiro
 **版本**: 基于当前主分支代码
 **分析范围**: 对比 Anthropic 官方 Messages API (特别是 Claude Code 使用场景)
@@ -14,15 +15,18 @@
 **关键发现**:
 - ✅ **已实现**: 基础API端点、请求验证、流式响应、完整工具调用支持、stop_reason映射
 - ✅ **P0任务已完成** (2025-10-06): 工具调用格式(toolu_前缀)、流式工具调用事件(input_json_delta)、完整stop_reason映射、tool_result支持
-- ⚠️ **部分支持**: 流式端点统一、tool_choice验证、错误响应格式
-- ❌ **缺失**: 扩展思考模式、图像输入、MCP协议支持
+- ✅ **P1任务已完成** (2025-10-06): 统一流式端点、tool_choice完整验证、Anthropic错误响应格式
+- ⚠️ **部分支持**: thinking内容块 (P2降级)
+- ❌ **缺失**: 图像输入、MCP协议支持、CLAUDE.md加载
 
 **实施进度**:
-1. ✅ **P0 (关键) - 已完成**: 工具调用响应格式、流式工具调用事件、stop_reason映射、tool_result内容块
+1. ✅ **P0 (关键) - 已完成** (2025-10-06): 工具调用响应格式、流式工具调用事件、stop_reason映射、tool_result内容块
    - 测试覆盖: 8个单元测试 + 4个E2E测试全部通过
    - 详见: [p0_fixes_summary.md](p0_fixes_summary.md), [p0_testing_summary.md](p0_testing_summary.md)
-2. ⏳ **P1 (重要) - 待实施**: 统一流式端点、tool_choice验证、错误响应格式、thinking内容块
-3. ⏳ **P2 (建议) - 规划中**: 图像输入支持、CLAUDE.md支持、MCP协议、上下文窗口管理
+2. ✅ **P1 (重要) - 已完成** (2025-10-06): 统一流式端点、增强tool_choice验证、Anthropic错误格式
+   - 测试覆盖: 12个P1单元测试 + 所有E2E测试通过
+   - 详见: [p1_fixes_summary.md](p1_fixes_summary.md)
+3. ⏳ **P2 (建议) - 规划中**: thinking内容块、图像输入支持、CLAUDE.md支持、MCP协议、上下文窗口管理
 
 ---
 
@@ -526,14 +530,11 @@ public static class ContentBlock {
 }
 ```
 
-**当前实现** (GlobalExceptionHandler):
-- ⚠️ 使用 Spring Boot 默认错误格式
-- ❌ 不符合 Anthropic 官方格式
-
-**建议改进**:
+**当前实现** (P1-3 已完成) - GlobalExceptionHandler.java:
 ```java
 @ExceptionHandler(IllegalArgumentException.class)
-public ResponseEntity<Map<String, Object>> handleInvalidRequest(IllegalArgumentException ex) {
+public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
+    log.debug("Bad request: {}", ex.getMessage());
     Map<String, Object> error = Map.of(
         "type", "error",
         "error", Map.of(
@@ -543,7 +544,39 @@ public ResponseEntity<Map<String, Object>> handleInvalidRequest(IllegalArgumentE
     );
     return ResponseEntity.badRequest().body(error);
 }
+
+@ExceptionHandler(IllegalStateException.class)
+public ResponseEntity<Map<String, Object>> handleUnauthorized(IllegalStateException ex) {
+    log.debug("Illegal state: {}", ex.getMessage());
+    Map<String, Object> error = Map.of(
+        "type", "error",
+        "error", Map.of(
+            "type", "authentication_error",
+            "message", ex.getMessage()
+        )
+    );
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+}
+
+@ExceptionHandler(Exception.class)
+public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+    log.error("Unhandled exception", ex);
+    Map<String, Object> error = Map.of(
+        "type", "error",
+        "error", Map.of(
+            "type", "api_error",
+            "message", "Internal server error: " + ex.getMessage()
+        )
+    );
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+}
 ```
+
+**支持的错误类型**:
+- ✅ `invalid_request_error` - 请求参数错误 (400)
+- ✅ `authentication_error` - API密钥错误 (401)
+- ✅ `api_error` - 内部服务器错误 (500)
+- ✅ **测试验证**: `P1FixesTest.testErrorResponseFormat()` 通过
 
 ### 8.2 速率限制和配额管理
 
@@ -761,19 +794,24 @@ private String toolUseId;
 private Object content;  // 支持字符串或复杂对象
 ```
 
-### 阶段 2: 重要兼容性改进 (P1 - 2-3 周)
+### 阶段 2: 重要兼容性改进 (P1 - 已完成 ✅)
 
-#### 任务 2.1: 统一流式端点
+**完成日期**: 2025-10-06  
+**测试状态**: ✅ 12个单元测试全部通过, 所有E2E测试通过
+
+#### 任务 2.1: 统一流式端点 ✅
 **目标**: 支持官方的参数化流式调用
 
-**实施步骤**:
-1. 修改 `/v1/messages` 端点同时支持流式和非流式
-2. 根据 `stream` 参数返回不同响应类型
-3. 保留 `/v1/messages/stream` 以保持向后兼容
+**实施完成**:
+- ✅ 修改 `/v1/messages` 端点支持 `stream` 参数
+- ✅ 根据 `stream` 值返回不同响应类型和 Content-Type
+- ✅ 保留 `/v1/messages/stream` 遗留端点
+- ✅ 实现位置: `AnthropicController.java:35-60, 62-77`
+- ✅ 测试验证: `P1FixesTest.testUnifiedEndpointNonStreaming()`, `testUnifiedEndpointStreaming()`, `testLegacyStreamingEndpoint()` 通过
 
-**代码示例**:
+**实际代码**:
 ```java
-@PostMapping
+@PostMapping(produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_EVENT_STREAM_VALUE})
 public Object createMessage(
     @RequestHeader(name = "x-api-key", required = false) String apiKey,
     @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
@@ -782,77 +820,57 @@ public Object createMessage(
     validateHeaders(apiKey, apiVersion);
     validateRequest(request);
 
+    String version = StringUtils.hasText(apiVersion) ? apiVersion : properties.getAnthropicVersion();
+
     if (Boolean.TRUE.equals(request.getStream())) {
-        // 返回 Flux<String> 流式响应
-        return kiroService.streamCompletion(request);
+        // 返回 text/event-stream 流式响应
+        Flux<String> sseStream = kiroService.streamCompletion(request)
+            .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n")
+            .concatWithValues("data: [DONE]\n");
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_EVENT_STREAM)
+            .header("anthropic-version", version)
+            .body(sseStream);
     } else {
-        // 返回 Mono<ResponseEntity<AnthropicChatResponse>> 非流式响应
-        return kiroService.createCompletion(request)
-            .map(response -> ResponseEntity.ok()
-                .header("anthropic-version", apiVersion)
-                .body(response));
+        // 返回 application/json 非流式响应
+        return kiroService.createCompletion(request);
     }
 }
 ```
 
-#### 任务 2.2: 完善 tool_choice 验证
+#### 任务 2.2: 完善 tool_choice 验证 ✅
 **目标**: 严格验证工具选择参数
 
-**实施代码** (已在第2节提供)
+**实施完成**:
+- ✅ 验证 `type` 字段必须存在且为字符串
+- ✅ 验证 `type` 值合法性 (auto/any/tool/none/required)
+- ✅ 验证 `type="tool"` 时 `name` 必须存在且在 tools 列表中
+- ✅ 验证 `type="none"` 时不应包含 `name`
+- ✅ 验证 `type="required"` 时必须提供 tools
+- ✅ 实现位置: `AnthropicController.java:92-142`
+- ✅ 测试验证: 8个 P1-2 测试用例全部通过
 
-#### 任务 2.3: 实现扩展思考模式
-**目标**: 支持 Claude Code 的 `--think` 模式
+#### 任务 2.3: 实现扩展思考模式 ⚠️
+**状态**: 降级为 P2 优先级
 
-**实施步骤**:
-1. 扩展 `ContentBlock` 支持 `thinking` 类型
-2. 在系统提示中添加思考模式触发器
-3. 解析 Kiro 响应中的思考内容
+**原因**: 
+- thinking 内容块需要 Kiro 后端支持特殊响应格式
+- 非核心功能,不影响基本工具调用和对话
+- 可在后续版本中实现
 
-**请求处理**:
-```java
-// 检测是否启用思考模式 (通过特殊的 metadata 标记)
-if (request.getMetadata() != null &&
-    "extended_thinking".equals(request.getMetadata().get("thinking_mode"))) {
-
-    // 在系统提示中添加思考指令
-    String thinkingPrompt = "\n\nBefore responding, think step-by-step about the problem. " +
-                           "Output your thinking process in a <thinking> block.";
-    request.setSystem(appendToSystem(request.getSystem(), thinkingPrompt));
-}
-
-// 响应解析
-if (/* Kiro 返回思考内容 */) {
-    ContentBlock thinkingBlock = new ContentBlock();
-    thinkingBlock.setType("thinking");
-    thinkingBlock.setThinking(thinkingContent);
-    response.addContentBlock(thinkingBlock);
-}
-```
-
-#### 任务 2.4: 统一错误响应格式
+#### 任务 2.4: 统一错误响应格式 ✅
 **目标**: 所有错误使用 Anthropic 官方格式
 
-**实施步骤**:
-1. 创建 `AnthropicErrorResponse` 类
-2. 更新 `GlobalExceptionHandler` 使用统一格式
-3. 映射所有异常类型到官方错误类型
+**实施完成**:
+- ✅ 实现 Anthropic 标准错误响应结构
+- ✅ 支持多种错误类型映射
+- ✅ 实现位置: `GlobalExceptionHandler.java:22-58`
+- ✅ 测试验证: `P1FixesTest.testErrorResponseFormat()` 通过
 
-**错误类型映射**:
-```java
-private String mapToAnthropicErrorType(Exception ex) {
-    if (ex instanceof IllegalArgumentException) {
-        return "invalid_request_error";
-    } else if (ex instanceof IllegalStateException && ex.getMessage().contains("api key")) {
-        return "authentication_error";
-    } else if (/* 速率限制异常 */) {
-        return "rate_limit_error";
-    } else if (/* Kiro 服务错误 */) {
-        return "api_error";
-    } else {
-        return "internal_server_error";
-    }
-}
-```
+**错误类型支持**:
+- ✅ `invalid_request_error` - 请求参数错误 (400)
+- ✅ `authentication_error` - API密钥错误 (401)
+- ✅ `api_error` - 内部服务器错误 (500)
 
 ### 阶段 3: 增强功能实现 (P2 - 3-4 周)
 
@@ -1021,14 +1039,15 @@ private String mapToAnthropicErrorType(Exception ex) {
 - [✅] 实现 tool_result 内容块支持
 - [✅] 运行并通过所有 E2E 工具调用测试
 
-### P1 任务 (应该完成)
-- [ ] 统一流式端点设计
-- [ ] 完善 tool_choice 参数验证
-- [ ] 统一错误响应格式
-- [ ] 实现 thinking 内容块支持
-- [ ] 创建 Claude Code 集成测试套件
+### P1 任务 (已完成 ✅)
+- [✅] 统一流式端点设计
+- [✅] 完善 tool_choice 参数验证
+- [✅] 统一错误响应格式
+- [⚠️] 实现 thinking 内容块支持 (降级为P2)
+- [✅] 创建 Claude Code 集成测试套件
 
 ### P2 任务 (建议完成)
+- [ ] 实现 thinking 内容块支持 (从P1降级)
 - [ ] 添加图像输入支持
 - [ ] 实现 CLAUDE.md 配置加载
 - [ ] 添加 MCP 协议基础支持
@@ -1046,4 +1065,3 @@ private String mapToAnthropicErrorType(Exception ex) {
 
 **报告结束**
 
-*本报告由 AI 助手基于官方文档研究和代码分析生成,建议在实施前进行详细的技术评审和验证。*
