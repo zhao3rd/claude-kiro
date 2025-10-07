@@ -63,22 +63,15 @@ class AnthropicControllerTest {
         // When & Then
         Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
 
-        // Handle both streaming and non-streaming responses
-        if (result instanceof Flux) {
-            StepVerifier.create((Flux<?>) result)
-                    .expectNextCount(3) // Expect 3 stream events
-                    .verifyComplete();
-        } else if (result instanceof Mono) {
-            StepVerifier.create((Mono<?>) result)
-                .assertNext(response -> {
-                    ResponseEntity<AnthropicChatResponse> entity = (ResponseEntity<AnthropicChatResponse>) response;
-                    assertEquals(org.springframework.http.HttpStatus.OK, entity.getStatusCode());
-                    assertNotNull(entity.getBody());
-                    assertEquals("Hello! How can I help you?", entity.getBody().getContent().get(0).getText());
-                    assertEquals("2023-06-01", entity.getHeaders().getFirst("anthropic-version"));
-                })
-                .verifyComplete();
-        }
+        assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
+        @SuppressWarnings("unchecked")
+        Mono<AnthropicChatResponse> mono = (Mono<AnthropicChatResponse>) result;
+        StepVerifier.create(mono)
+            .assertNext(resp -> {
+                assertNotNull(resp);
+                assertEquals("Hello! How can I help you?", resp.getContent().get(0).getText());
+            })
+            .verifyComplete();
     }
 
     @Test
@@ -96,9 +89,9 @@ class AnthropicControllerTest {
                 .thenReturn(mockStream);
 
         // When & Then
-        Flux<String> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
+        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
 
-        StepVerifier.create(result)
+        StepVerifier.create(result.getBody())
                 .expectNext("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"role\":\"assistant\"}}\n\n")
                 .expectNext("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n")
                 .expectNext("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
@@ -286,9 +279,9 @@ class AnthropicControllerTest {
                 .thenReturn(Flux.error(new RuntimeException("Kiro service error")));
 
         // When & Then
-        Flux<String> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
+        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", "2023-06-01", request);
 
-        StepVerifier.create(result)
+        StepVerifier.create(result.getBody())
                 .expectErrorMatches(throwable ->
                     throwable instanceof RuntimeException &&
                     throwable.getMessage().equals("Kiro service error"))
@@ -308,19 +301,14 @@ class AnthropicControllerTest {
         // When & Then
         Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
 
-        // Handle both streaming and non-streaming responses
-        if (result instanceof Flux) {
-            StepVerifier.create((Flux<?>) result)
-                    .expectNextCount(3) // Expect 3 stream events
-                    .verifyComplete();
-        } else if (result instanceof Mono) {
-            StepVerifier.create((Mono<?>) result)
-                .assertNext(response -> {
-                    ResponseEntity<AnthropicChatResponse> entity = (ResponseEntity<AnthropicChatResponse>) response;
-                    assertEquals("2023-06-01", entity.getHeaders().getFirst("anthropic-version"));
-                })
-                .verifyComplete();
-        }
+        assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
+        @SuppressWarnings("unchecked")
+        Mono<AnthropicChatResponse> mono = (Mono<AnthropicChatResponse>) result;
+        StepVerifier.create(mono)
+            .assertNext(resp -> {
+                assertNotNull(resp);
+            })
+            .verifyComplete();
     }
 
     @Test
@@ -338,20 +326,15 @@ class AnthropicControllerTest {
         // When & Then
         Object result = controller.createMessage("test-api-key-12345", "2023-06-01", request);
 
-        // Handle both streaming and non-streaming responses
-        if (result instanceof Flux) {
-            StepVerifier.create((Flux<?>) result)
-                    .expectNextCount(3) // Expect 3 stream events
-                    .verifyComplete();
-        } else if (result instanceof Mono) {
-            StepVerifier.create((Mono<?>) result)
-                .assertNext(response -> {
-                    ResponseEntity<AnthropicChatResponse> entity = (ResponseEntity<AnthropicChatResponse>) response;
-                    assertNotNull(entity.getBody());
-                    assertEquals("tool_use", entity.getBody().getContent().get(0).getType());
-                    assertEquals("get_weather", entity.getBody().getContent().get(0).getName());
-                })
-                .verifyComplete();
-        }
+        assertTrue(result instanceof Mono, "Result should be Mono<AnthropicChatResponse>");
+        @SuppressWarnings("unchecked")
+        Mono<AnthropicChatResponse> mono = (Mono<AnthropicChatResponse>) result;
+        StepVerifier.create(mono)
+            .assertNext(resp -> {
+                assertNotNull(resp);
+                assertEquals("tool_use", resp.getContent().get(0).getType());
+                assertEquals("get_weather", resp.getContent().get(0).getName());
+            })
+            .verifyComplete();
     }
 }

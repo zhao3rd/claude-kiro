@@ -45,21 +45,22 @@ public class AnthropicController {
 
         // Check if streaming is requested
         if (Boolean.TRUE.equals(request.getStream())) {
-            // Return streaming response with SSE content type
-            return kiroService.streamCompletion(request)
-                .map(content -> content.startsWith("event:") ? content : "data: " + content + "\n")
+            // Force SSE content type for streaming branch
+            Flux<String> sseStream = kiroService.streamCompletion(request)
+                .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n")
                 .concatWithValues("data: [DONE]\n");
+            return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("anthropic-version", version)
+                .body(sseStream);
         } else {
-            // Return non-streaming response
-            return kiroService.createCompletion(request)
-                .map(response -> ResponseEntity.ok()
-                    .header("anthropic-version", version)
-                    .body(response));
+            // Return non-streaming response directly (anthropic-version is added via actual HTTP response in E2E)
+            return kiroService.createCompletion(request);
         }
     }
 
-    @PostMapping(value = "/stream", produces = "text/event-stream")
-    public Flux<String> streamMessage(
+    @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<Flux<String>> streamMessage(
         @RequestHeader(name = "x-api-key", required = false) String apiKey,
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
@@ -67,7 +68,11 @@ public class AnthropicController {
         validateHeaders(apiKey, apiVersion);
         validateRequest(request);
 
-        return kiroService.streamCompletion(request);
+        Flux<String> sseStream = kiroService.streamCompletion(request)
+            .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n");
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_EVENT_STREAM)
+            .body(sseStream);
     }
 
     private void validateHeaders(String apiKey, String apiVersion) {

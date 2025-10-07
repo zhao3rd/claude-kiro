@@ -89,28 +89,7 @@ class P1FixesTest {
         properties.setApiKey("test-api-key");
         properties.setAnthropicVersion("2023-06-01");
 
-        // Mock WebClient.Builder behavior
-        when(webClientBuilder.baseUrl(any())).thenReturn(webClientBuilder);
-        when(webClientBuilder.defaultHeader(any(), any())).thenReturn(webClientBuilder);
-        when(webClientBuilder.build()).thenReturn(webClient);
-
-        // Mock WebClient chain for actual HTTP calls
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.header(any(), any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.body(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.exchange()).thenReturn(Mono.empty());
-
-        // Initialize KiroService with mocked dependencies
-        KiroService kiroService = new KiroService(
-            properties,
-            tokenManager,
-            eventParser,
-            bracketToolCallParser,
-            toolCallDeduplicator,
-            webClientBuilder,
-            mapper
-        );
-
+        // Initialize controller with mocked KiroService (unit tests stub service methods directly)
         controller = new AnthropicController(properties, kiroService);
         webTestClient = WebTestClient.bindToController(controller)
             .controllerAdvice(new GlobalExceptionHandler())
@@ -196,7 +175,7 @@ class P1FixesTest {
             .bodyValue(request)
             .exchange()
             .expectStatus().isOk()
-            .expectHeader().contentType("text/event-stream")
+            .expectHeader().contentTypeCompatibleWith("text/event-stream")
             .expectBody()
             .consumeWith(response -> {
                 String body = new String(response.getResponseBody());
