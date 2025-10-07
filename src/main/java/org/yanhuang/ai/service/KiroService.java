@@ -353,7 +353,7 @@ public class KiroService {
             // Add thinking mode warning if requested but not supported
             String finalText = contentBuilder.toString();
             if (request.getThinking() != null && !request.getThinking().isEmpty()) {
-                String warning = "[Note: Extended thinking mode is not supported currently. Response generated in standard mode.]\n\n";
+                String warning = "[Note: Extended thinking mode is not supported by Kiro Gateway. Response generated in standard mode.]\n\n";
                 finalText = warning + finalText;
                 log.info("Added thinking mode unsupported warning to response");
             }

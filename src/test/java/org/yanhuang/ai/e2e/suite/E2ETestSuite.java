@@ -7,6 +7,8 @@ import org.yanhuang.ai.e2e.MultiRoundConversationE2ETest;
 import org.yanhuang.ai.e2e.PerformanceAndStressE2ETest;
 import org.yanhuang.ai.e2e.StreamingAndErrorE2ETest;
 import org.yanhuang.ai.e2e.ToolCallE2ETest;
+import org.yanhuang.ai.e2e.ToolChoiceValidationE2ETest;
+import org.yanhuang.ai.e2e.McpToolE2ETest;
 
 /**
  * E2E测试套件
@@ -16,6 +18,8 @@ import org.yanhuang.ai.e2e.ToolCallE2ETest;
 @SelectClasses({
     ClaudeChatE2ETest.class,
     ToolCallE2ETest.class,
+    ToolChoiceValidationE2ETest.class,
+    McpToolE2ETest.class,
     MultiRoundConversationE2ETest.class,
     StreamingAndErrorE2ETest.class,
     PerformanceAndStressE2ETest.class

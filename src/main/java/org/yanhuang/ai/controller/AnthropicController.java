@@ -14,6 +14,7 @@ import org.yanhuang.ai.config.AppProperties;
 import org.yanhuang.ai.model.AnthropicChatRequest;
 import org.yanhuang.ai.model.AnthropicChatResponse;
 import org.yanhuang.ai.model.AnthropicMessage;
+import org.yanhuang.ai.model.ToolDefinition;
 import org.yanhuang.ai.service.ImageValidator;
 import org.yanhuang.ai.service.KiroService;
 import org.yanhuang.ai.service.TokenCounter;
@@ -120,6 +121,15 @@ public class AnthropicController {
         }
         // Enhanced tool_choice validation
         if (request.getToolChoice() != null && !request.getToolChoice().isEmpty()) {
+            // Debug log tools structure for troubleshooting
+            if (request.getTools() != null) {
+                for (ToolDefinition td : request.getTools()) {
+                    String n = td.getEffectiveName();
+                    String d = td.getEffectiveDescription();
+                    // English log per CLAUDE.md new code rule
+                    System.out.println("[ToolDebug] tool name=" + n + ", desc=" + d);
+                }
+            }
             validateToolChoice(request.getToolChoice(), request.getTools());
         }
         // Context window validation - use API mode limit (1M tokens)
@@ -157,34 +167,48 @@ public class AnthropicController {
                     throw new IllegalArgumentException("tools must be provided when tool_choice.type is 'required'");
                 }
                 break;
-            default:
-                // For specific tool names, validate that the tool exists in the tools list
+            case "tool":
+                // Specific tool name selection requires a valid name
                 if (!toolChoice.containsKey("name")) {
                     throw new IllegalArgumentException("tool_choice.name is required when tool_choice.type is a specific tool name");
                 }
 
-                Object name = toolChoice.get("name");
-                if (!(name instanceof String) || ((String) name).trim().isEmpty()) {
+                Object nameObj = toolChoice.get("name");
+                if (!(nameObj instanceof String) || ((String) nameObj).trim().isEmpty()) {
                     throw new IllegalArgumentException("tool_choice.name must be a non-empty string");
                 }
 
-                // If tools are provided, validate the specific tool exists
+                String selectedToolName = (String) nameObj;
                 if (tools != null && !tools.isEmpty()) {
-                    boolean toolFound = tools.stream()
-                        .anyMatch(tool -> {
-                            if (tool instanceof Map) {
-                                Map<?, ?> toolMap = (Map<?, ?>) tool;
-                                Object toolName = toolMap.get("name");
-                                return name.equals(toolName);
+                    boolean toolFound = tools.stream().anyMatch(tool -> {
+                        // Support both typed ToolDefinition and raw Map representations
+                        if (tool instanceof ToolDefinition td) {
+                            String effective = td.getEffectiveName();
+                            return selectedToolName.equals(effective);
+                        }
+                        if (tool instanceof Map) {
+                            Map<?, ?> toolMap = (Map<?, ?>) tool;
+                            Object direct = toolMap.get("name");
+                            if (selectedToolName.equals(direct)) {
+                                return true;
                             }
-                            return false;
-                        });
+                            Object function = toolMap.get("function");
+                            if (function instanceof Map) {
+                                Object fnName = ((Map<?, ?>) function).get("name");
+                                return selectedToolName.equals(fnName);
+                            }
+                        }
+                        return false;
+                    });
 
                     if (!toolFound) {
-                        throw new IllegalArgumentException("tool_choice.name '" + name + "' must be present in the tools list");
+                        throw new IllegalArgumentException("tool_choice.name '" + selectedToolName + "' must be present in the tools list");
                     }
                 }
                 break;
+            default:
+                // Unknown type
+                throw new IllegalArgumentException("tool_choice.type must be one of: auto, any, tool, none, required");
         }
     }
 }

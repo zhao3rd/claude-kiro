@@ -32,7 +32,7 @@ app:
 # E2E测试特定配置
 e2e:
   max-calls-per-batch: 5
-  timeout-seconds: 120  # Long-form completions may exceed 60 seconds
+  timeout-seconds: 30
   retry-attempts: 2
   state-file-path: "target/e2e-test-state.json"
   enable-call-tracking: true
@@ -46,5 +46,5 @@ server:
 test:
   # WebTestClient配置
   webclient:
-    timeout: 120s
-    response-timeout: 120s
+    timeout: 30s
+    response-timeout: 30s

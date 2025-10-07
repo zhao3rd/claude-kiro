@@ -59,6 +59,7 @@ public class ClaudeApiClient {
         return webClient.post()
                 .uri("/v1/messages")
                 .contentType(MediaType.APPLICATION_JSON)
+                .httpRequest(req -> log.debug("请求体: {}", request.toString()))
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(JsonNode.class)
@@ -67,6 +68,8 @@ public class ClaudeApiClient {
                 .doOnError(error -> log.error("聊天完成请求失败 #{} - 错误: {}", callCounter.get(), error.getMessage()))
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
                         .maxBackoff(Duration.ofSeconds(10))
+                        .filter(ex -> !(ex instanceof WebClientResponseException) ||
+                                !((WebClientResponseException) ex).getStatusCode().is4xxClientError())
                         .doBeforeRetry(retrySignal -> log.warn("重试聊天完成请求 #{} - 尝试: {}",
                                 callCounter.get(), retrySignal.totalRetries() + 1)))
                 .onErrorMap(WebClientResponseException.class, ex -> {
@@ -87,26 +90,65 @@ public class ClaudeApiClient {
         streamRequest.put("stream", true);
 
         return webClient.post()
-                .uri("/v1/messages/stream")
+                .uri("/v1/messages")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)  // 不需要添加stream字段，直接使用原请求
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(streamRequest)
                 .retrieve()
                 .bodyToFlux(String.class)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .map(this::parseServerSentEvent)
-                .filter(event -> !event.data().isEmpty())
-                .map(event -> parseJsonData(event.data()))
-                .filter(jsonNode -> jsonNode != null)
+                .filter(event -> event != null && !event.data().isEmpty())
+                .flatMap(event -> {
+                    JsonNode node = parseJsonData(event.data());
+                    return node == null ? Mono.empty() : Mono.just(node);
+                })
                 .doOnComplete(() -> log.info("流式聊天完成请求完成 #{}", callCounter.get()))
                 .doOnError(error -> log.error("流式聊天完成请求失败 #{} - 错误: {}", callCounter.get(), error.getMessage()))
                 .retryWhen(Retry.backoff(1, Duration.ofSeconds(2))
                         .maxBackoff(Duration.ofSeconds(5))
+                        .filter(ex -> !(ex instanceof WebClientResponseException) ||
+                                !((WebClientResponseException) ex).getStatusCode().is4xxClientError())
                         .doBeforeRetry(retrySignal -> log.warn("重试流式聊天完成请求 #{} - 尝试: {}",
                                 callCounter.get(), retrySignal.totalRetries() + 1)))
                 .onErrorMap(WebClientResponseException.class, ex -> {
                     log.error("流式请求HTTP错误 #{} - 状态码: {}, 响应: {}",
                             callCounter.get(), ex.getStatusCode(), ex.getResponseBodyAsString());
                     return new RuntimeException("流式聊天完成请求失败: " + ex.getStatusCode(), ex);
+                });
+    }
+
+    /**
+     * 发送聊天完成请求（遗留流式端点）
+     */
+    public Flux<JsonNode> createChatCompletionStreamLegacy(JsonNode request) {
+        log.info("发送遗留流式聊天完成请求 #{} - 超时: {}秒", callCounter.incrementAndGet(), timeoutSeconds);
+
+        return webClient.post()
+                .uri("/v1/messages/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToFlux(String.class)
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .map(this::parseServerSentEvent)
+                .filter(event -> event != null && !event.data().isEmpty())
+                .flatMap(event -> {
+                    JsonNode node = parseJsonData(event.data());
+                    return node == null ? Mono.empty() : Mono.just(node);
+                })
+                .doOnComplete(() -> log.info("遗留流式聊天完成请求完成 #{}", callCounter.get()))
+                .doOnError(error -> log.error("遗留流式聊天完成请求失败 #{} - 错误: {}", callCounter.get(), error.getMessage()))
+                .retryWhen(Retry.backoff(1, Duration.ofSeconds(2))
+                        .maxBackoff(Duration.ofSeconds(5))
+                        .filter(ex -> !(ex instanceof WebClientResponseException) ||
+                                !((WebClientResponseException) ex).getStatusCode().is4xxClientError())
+                        .doBeforeRetry(retrySignal -> log.warn("重试遗留流式聊天完成请求 #{} - 尝试: {}",
+                                callCounter.get(), retrySignal.totalRetries() + 1)))
+                .onErrorMap(WebClientResponseException.class, ex -> {
+                    log.error("遗留流式请求HTTP错误 #{} - 状态码: {}, 响应: {}",
+                            callCounter.get(), ex.getStatusCode(), ex.getResponseBodyAsString());
+                    return new RuntimeException("遗留流式聊天完成请求失败: " + ex.getStatusCode(), ex);
                 });
     }
 
@@ -127,6 +169,8 @@ public class ClaudeApiClient {
                 .doOnError(error -> log.error("工具调用请求失败 #{} - 错误: {}", callCounter.get(), error.getMessage()))
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
                         .maxBackoff(Duration.ofSeconds(10))
+                        .filter(ex -> !(ex instanceof WebClientResponseException) ||
+                                !((WebClientResponseException) ex).getStatusCode().is4xxClientError())
                         .doBeforeRetry(retrySignal -> log.warn("重试工具调用请求 #{} - 尝试: {}",
                                 callCounter.get(), retrySignal.totalRetries() + 1)))
                 .onErrorMap(WebClientResponseException.class, ex -> {
