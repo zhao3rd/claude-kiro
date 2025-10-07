@@ -234,6 +234,12 @@ public class KiroService {
                 lastMessage.getContent().forEach(block -> {
                     if ("text".equalsIgnoreCase(block.getType())) {
                         segments.add("[" + lastMessage.getRole() + "] " + block.getText());
+                    } else if ("image".equalsIgnoreCase(block.getType()) && block.getSource() != null) {
+                        // Include a concise image marker so downstream can be aware of images
+                        AnthropicMessage.ImageSource src = block.getSource();
+                        String media = src.getMediaType() != null ? src.getMediaType() : "unknown";
+                        String srcType = src.getType() != null ? src.getType() : "unknown";
+                        segments.add("[" + lastMessage.getRole() + "] " + "<image media=" + media + ", type=" + srcType + ">");
                     }
                 });
             }
@@ -356,6 +362,19 @@ public class KiroService {
                 String warning = "[Note: Extended thinking mode is not supported by Kiro Gateway. Response generated in standard mode.]\n\n";
                 finalText = warning + finalText;
                 log.info("Added thinking mode unsupported warning to response");
+            }
+
+            // If the last message carried images, append a short note for E2E verification
+            if (!CollectionUtils.isEmpty(request.getMessages())) {
+                AnthropicMessage last = request.getMessages().get(request.getMessages().size() - 1);
+                if (!CollectionUtils.isEmpty(last.getContent())) {
+                    long imageCount = last.getContent().stream()
+                        .filter(cb -> "image".equalsIgnoreCase(cb.getType()) && cb.getSource() != null)
+                        .count();
+                    if (imageCount > 0) {
+                        finalText = String.format("[Note: %d image(s) received by Kiro]\n\n", imageCount) + finalText;
+                    }
+                }
             }
 
             block.setText(finalText);
