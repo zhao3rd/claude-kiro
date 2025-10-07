@@ -43,6 +43,7 @@ public class KiroService {
     private final CodeWhispererEventParser eventParser;
     private final BracketToolCallParser bracketToolCallParser;
     private final ToolCallDeduplicator toolCallDeduplicator;
+    private final McpToolIdentifier mcpToolIdentifier;
     private final WebClient webClient;
     private final ObjectMapper mapper;
 
@@ -51,6 +52,7 @@ public class KiroService {
                        CodeWhispererEventParser eventParser,
                        BracketToolCallParser bracketToolCallParser,
                        ToolCallDeduplicator toolCallDeduplicator,
+                       McpToolIdentifier mcpToolIdentifier,
                        WebClient.Builder webClientBuilder,
                        ObjectMapper mapper) {
         this.properties = properties;
@@ -58,6 +60,7 @@ public class KiroService {
         this.eventParser = eventParser;
         this.bracketToolCallParser = bracketToolCallParser;
         this.toolCallDeduplicator = toolCallDeduplicator;
+        this.mcpToolIdentifier = mcpToolIdentifier;
         this.webClient = webClientBuilder.baseUrl(properties.getKiro().getBaseUrl()).build();
         this.mapper = mapper;
     }
@@ -147,6 +150,18 @@ public class KiroService {
         userInput.put("origin", "AI_EDITOR");
 
         if (!CollectionUtils.isEmpty(request.getTools())) {
+            // Log MCP tool detection
+            long mcpToolCount = mcpToolIdentifier.countMcpTools(request.getTools());
+            if (mcpToolCount > 0) {
+                log.info("Request contains {} MCP tools out of {} total tools", mcpToolCount, request.getTools().size());
+                // Log detailed MCP tool information
+                mcpToolIdentifier.filterMcpTools(request.getTools()).forEach(tool -> {
+                    String serverName = mcpToolIdentifier.extractMcpServerName(tool.getEffectiveName());
+                    String functionName = mcpToolIdentifier.extractToolFunctionName(tool.getEffectiveName());
+                    log.info("  MCP Tool: server={}, function={}, fullName={}", serverName, functionName, tool.getEffectiveName());
+                });
+            }
+
             ObjectNode context = mapper.createObjectNode();
             ArrayNode toolsNode = mapper.createArrayNode();
             request.getTools().forEach(tool -> {
@@ -338,7 +353,7 @@ public class KiroService {
             // Add thinking mode warning if requested but not supported
             String finalText = contentBuilder.toString();
             if (request.getThinking() != null && !request.getThinking().isEmpty()) {
-                String warning = "[Note: Extended thinking mode is not supported by Kiro Gateway. Response generated in standard mode.]\n\n";
+                String warning = "[Note: Extended thinking mode is not supported currently. Response generated in standard mode.]\n\n";
                 finalText = warning + finalText;
                 log.info("Added thinking mode unsupported warning to response");
             }

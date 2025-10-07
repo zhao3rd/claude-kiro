@@ -22,6 +22,7 @@ import org.yanhuang.ai.parser.BracketToolCallParser;
 import org.yanhuang.ai.parser.CodeWhispererEventParser;
 import org.yanhuang.ai.parser.ToolCallDeduplicator;
 import org.yanhuang.ai.service.KiroService;
+import org.yanhuang.ai.service.McpToolIdentifier;
 import org.yanhuang.ai.service.TokenManager;
 
 /**
@@ -48,6 +49,7 @@ class P0FixesTest {
         CodeWhispererEventParser eventParser = new CodeWhispererEventParser(mapper);
         BracketToolCallParser bracketParser = new BracketToolCallParser();
         ToolCallDeduplicator deduplicator = new ToolCallDeduplicator();
+        McpToolIdentifier mcpToolIdentifier = new McpToolIdentifier();
 
         kiroService = new KiroService(
             properties,
@@ -55,6 +57,7 @@ class P0FixesTest {
             eventParser,
             bracketParser,
             deduplicator,
+            mcpToolIdentifier,
             WebClient.builder(),
             mapper
         );

@@ -20,6 +20,7 @@ import org.yanhuang.ai.service.KiroService;
 import org.yanhuang.ai.parser.CodeWhispererEventParser;
 import org.yanhuang.ai.parser.BracketToolCallParser;
 import org.yanhuang.ai.parser.ToolCallDeduplicator;
+import org.yanhuang.ai.service.McpToolIdentifier;
 import org.yanhuang.ai.TestDataFactory;
 
 import org.springframework.web.reactive.function.client.WebClient;
@@ -55,6 +56,9 @@ class KiroServiceSimpleTest {
     private ToolCallDeduplicator toolCallDeduplicator;
 
     @Mock
+    private McpToolIdentifier mcpToolIdentifier;
+
+    @Mock
     private WebClient.Builder webClientBuilder;
 
     private KiroService kiroService;
@@ -78,7 +82,7 @@ class KiroServiceSimpleTest {
         // Manually create the service instance with all mocks
         kiroService = new KiroService(
                 properties, tokenManager, eventParser, bracketToolCallParser,
-                toolCallDeduplicator, webClientBuilder, new com.fasterxml.jackson.databind.ObjectMapper());
+                toolCallDeduplicator, mcpToolIdentifier, webClientBuilder, new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Test

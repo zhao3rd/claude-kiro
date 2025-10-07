@@ -13,7 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.yanhuang.ai.config.AppProperties;
 import org.yanhuang.ai.model.AnthropicChatRequest;
 import org.yanhuang.ai.model.AnthropicChatResponse;
+import org.yanhuang.ai.model.AnthropicMessage;
+import org.yanhuang.ai.service.ImageValidator;
 import org.yanhuang.ai.service.KiroService;
+import org.yanhuang.ai.service.TokenCounter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,10 +29,14 @@ public class AnthropicController {
 
     private final AppProperties properties;
     private final KiroService kiroService;
+    private final TokenCounter tokenCounter;
+    private final ImageValidator imageValidator;
 
-    public AnthropicController(AppProperties properties, KiroService kiroService) {
+    public AnthropicController(AppProperties properties, KiroService kiroService, TokenCounter tokenCounter, ImageValidator imageValidator) {
         this.properties = properties;
         this.kiroService = kiroService;
+        this.tokenCounter = tokenCounter;
+        this.imageValidator = imageValidator;
     }
 
     @PostMapping(produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_EVENT_STREAM_VALUE})
@@ -101,6 +108,12 @@ public class AnthropicController {
             if (message.getContent() == null || message.getContent().isEmpty()) {
                 throw new IllegalArgumentException("message content cannot be empty");
             }
+            // Validate image content blocks
+            message.getContent().forEach(contentBlock -> {
+                if ("image".equals(contentBlock.getType()) && contentBlock.getSource() != null) {
+                    imageValidator.validateImageSource(contentBlock.getSource());
+                }
+            });
         });
         if (Boolean.TRUE.equals(request.getStream()) && request.getMaxTokens() != null && request.getMaxTokens() > 4096) {
             throw new IllegalArgumentException("max_tokens exceeds streaming limit");
@@ -109,6 +122,8 @@ public class AnthropicController {
         if (request.getToolChoice() != null && !request.getToolChoice().isEmpty()) {
             validateToolChoice(request.getToolChoice(), request.getTools());
         }
+        // Context window validation - use API mode limit (1M tokens)
+        tokenCounter.validateContextWindow(request, TokenCounter.MAX_CONTEXT_TOKENS_API_MODE);
     }
 
     private void validateToolChoice(Map<String, Object> toolChoice, List<?> tools) {

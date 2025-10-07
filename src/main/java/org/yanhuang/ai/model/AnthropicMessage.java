@@ -53,8 +53,19 @@ public class AnthropicMessage {
         private String toolUseId;
         private Object content;  // Can be string or complex object
 
+        // image fields
+        private ImageSource source;
+
         public String getType() {
             return type;
+        }
+
+        public ImageSource getSource() {
+            return source;
+        }
+
+        public void setSource(ImageSource source) {
+            this.source = source;
         }
 
         public void setType(String type) {
@@ -107,6 +118,43 @@ public class AnthropicMessage {
 
         public void setContent(Object content) {
             this.content = content;
+        }
+    }
+
+    /**
+     * Image source for image content blocks
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ImageSource {
+        private String type;  // "base64" or "url"
+
+        @JsonProperty("media_type")
+        private String mediaType;  // "image/jpeg", "image/png", "image/gif", "image/webp"
+
+        private String data;  // base64-encoded image data or URL string
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getMediaType() {
+            return mediaType;
+        }
+
+        public void setMediaType(String mediaType) {
+            this.mediaType = mediaType;
+        }
+
+        public String getData() {
+            return data;
+        }
+
+        public void setData(String data) {
+            this.data = data;
         }
     }
 

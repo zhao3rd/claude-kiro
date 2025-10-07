@@ -41,6 +41,8 @@ class KiroServiceTest {
     private BracketToolCallParser bracketToolCallParser;
     @Mock
     private ToolCallDeduplicator toolCallDeduplicator;
+    @Mock
+    private McpToolIdentifier mcpToolIdentifier;
     private ObjectMapper mapper = new ObjectMapper();
 
     private WebClient webClient = WebClient.builder()
@@ -62,7 +64,7 @@ class KiroServiceTest {
         when(properties.getKiro()).thenReturn(kiroProps);
         when(tokenManager.currentToken()).thenReturn("token");
 
-        kiroService = new KiroService(properties, tokenManager, eventParser, bracketToolCallParser, toolCallDeduplicator, WebClient.builder(), mapper);
+        kiroService = new KiroService(properties, tokenManager, eventParser, bracketToolCallParser, toolCallDeduplicator, mcpToolIdentifier, WebClient.builder(), mapper);
     }
 
     @Test

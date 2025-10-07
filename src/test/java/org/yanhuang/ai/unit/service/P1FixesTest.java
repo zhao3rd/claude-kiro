@@ -27,8 +27,10 @@ import org.yanhuang.ai.model.AnthropicMessage;
 import org.yanhuang.ai.model.ToolDefinition;
 import org.yanhuang.ai.parser.CodeWhispererEventParser;
 import org.yanhuang.ai.parser.BracketToolCallParser;
+import org.yanhuang.ai.service.ImageValidator;
 import org.yanhuang.ai.service.KiroService;
 import org.yanhuang.ai.service.TokenManager;
+import org.yanhuang.ai.service.TokenCounter;
 import org.yanhuang.ai.parser.ToolCallDeduplicator;
 
 import java.util.List;
@@ -89,8 +91,10 @@ class P1FixesTest {
         properties.setApiKey("test-api-key");
         properties.setAnthropicVersion("2023-06-01");
 
-        // Initialize controller with mocked KiroService (unit tests stub service methods directly)
-        controller = new AnthropicController(properties, kiroService);
+        // Initialize controller with mocked KiroService, TokenCounter, and ImageValidator
+        TokenCounter tokenCounter = new TokenCounter();
+        ImageValidator imageValidator = new ImageValidator();
+        controller = new AnthropicController(properties, kiroService, tokenCounter, imageValidator);
         webTestClient = WebTestClient.bindToController(controller)
             .controllerAdvice(new GlobalExceptionHandler())
             .build();
