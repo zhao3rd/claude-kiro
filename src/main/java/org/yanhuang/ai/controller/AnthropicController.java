@@ -54,15 +54,19 @@ public class AnthropicController {
         @RequestBody AnthropicChatRequest request) {
 
         // Enhanced request logging for debugging
-        log.info("=== Claude Code Request Analysis ===");
-        log.info("Endpoint: /v1/messages");
-        log.info("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
-            apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
-            authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
-            apiVersion);
+        if (log.isDebugEnabled()) {
+            log.debug("=== Claude Code Request Analysis ===");
+            log.debug("Endpoint: /v1/messages");
+            log.debug("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
+                apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
+                authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
+                apiVersion);
+        }
 
         String resolvedApiKey = resolveApiKey(apiKey, authorization);
-        log.info("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+        if (log.isDebugEnabled()) {
+            log.debug("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+        }
 
         try {
             validateHeaders(resolvedApiKey, apiVersion);
@@ -73,8 +77,8 @@ public class AnthropicController {
         }
 
         // Debug: Log full request structure to analyze CC behavior
-        if (request.getMessages() != null) {
-            log.info("[DEBUG] Total messages in request: {}", request.getMessages().size());
+        if (log.isDebugEnabled() && request.getMessages() != null) {
+            log.debug("[DEBUG] Total messages in request: {}", request.getMessages().size());
             for (int i = 0; i < request.getMessages().size(); i++) {
                 AnthropicMessage msg = request.getMessages().get(i);
                 int contentLength = 0;
@@ -96,7 +100,7 @@ public class AnthropicController {
                         }
                     }
                 }
-                log.info("[DEBUG] Message {}: role={}, total_length={}, system_prompt_length={}, tool_result_length={}, content_preview={}",
+                log.debug("[DEBUG] Message {}: role={}, total_length={}, system_prompt_length={}, tool_result_length={}, content_preview={}",
                     i, msg.getRole(), contentLength, systemPromptLength, toolResultLength,
                     msg.getContent() != null && !msg.getContent().isEmpty() && msg.getContent().get(0).getText() != null
                         ? truncate(msg.getContent().get(0).getText(), 200) : "");
@@ -153,15 +157,19 @@ public class AnthropicController {
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
 
-        log.info("=== Claude Code Streaming Request Analysis ===");
-        log.info("Endpoint: /v1/messages/stream");
-        log.info("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
-            apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
-            authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
-            apiVersion);
+        if (log.isDebugEnabled()) {
+            log.debug("=== Claude Code Streaming Request Analysis ===");
+            log.debug("Endpoint: /v1/messages/stream");
+            log.debug("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
+                apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
+                authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
+                apiVersion);
+        }
 
         String resolvedApiKey = resolveApiKey(apiKey, authorization);
-        log.info("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+        if (log.isDebugEnabled()) {
+            log.debug("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+        }
 
         try {
             validateHeaders(resolvedApiKey, apiVersion);
@@ -243,11 +251,11 @@ public class AnthropicController {
                 }
             });
         });
-        if (Boolean.TRUE.equals(request.getStream()) && request.getMaxTokens() != null && request.getMaxTokens() > 4096) {
+        if (Boolean.TRUE.equals(request.getStream()) && request.getMaxTokens() != null && request.getMaxTokens() > 64000) {
             // Soft-cap max_tokens for streaming to improve compatibility with clients like Claude Code
             // Instead of rejecting the request, cap to the supported limit and continue
-            log.warn("max_tokens {} exceeds streaming limit {}; capping to limit", request.getMaxTokens(), 4096);
-            request.setMaxTokens(4096);
+            log.warn("max_tokens {} exceeds streaming limit {}; capping to limit", request.getMaxTokens(), 64000);
+            request.setMaxTokens(64000);
         }
         // Enhanced tool_choice validation
         if (request.getToolChoice() != null && !request.getToolChoice().isEmpty()) {
@@ -344,60 +352,62 @@ public class AnthropicController {
 
     // Analyze system prompts in the request
     private void analyzeSystemPrompts(AnthropicChatRequest request) {
-        log.info("=== System Prompt Analysis ===");
+        if (log.isDebugEnabled()) {
+            log.debug("=== System Prompt Analysis ===");
 
-        // Count system prompts in system blocks
-        int systemBlockCount = 0;
-        int systemBlockTotalLength = 0;
-        if (request.getSystem() != null && !request.getSystem().isEmpty()) {
-            systemBlockCount = request.getSystem().size();
-            for (AnthropicMessage.ContentBlock block : request.getSystem()) {
-                if (block.getText() != null) {
-                    systemBlockTotalLength += block.getText().length();
+            // Count system prompts in system blocks
+            int systemBlockCount = 0;
+            int systemBlockTotalLength = 0;
+            if (request.getSystem() != null && !request.getSystem().isEmpty()) {
+                systemBlockCount = request.getSystem().size();
+                for (AnthropicMessage.ContentBlock block : request.getSystem()) {
+                    if (block.getText() != null) {
+                        systemBlockTotalLength += block.getText().length();
+                    }
                 }
+                log.debug("System blocks: count={}, total_length={}", systemBlockCount, systemBlockTotalLength);
             }
-            log.info("System blocks: count={}, total_length={}", systemBlockCount, systemBlockTotalLength);
-        }
 
-        // Count system prompts embedded in messages
-        int messageSystemPromptCount = 0;
-        int messageSystemPromptTotalLength = 0;
-        int duplicateSystemPrompts = 0;
+            // Count system prompts embedded in messages
+            int messageSystemPromptCount = 0;
+            int messageSystemPromptTotalLength = 0;
+            int duplicateSystemPrompts = 0;
 
-        if (request.getMessages() != null) {
-            for (AnthropicMessage msg : request.getMessages()) {
-                if (msg.getContent() != null) {
-                    for (AnthropicMessage.ContentBlock block : msg.getContent()) {
-                        if ("text".equalsIgnoreCase(block.getType()) && block.getText() != null) {
-                            String text = block.getText();
-                            if (text.startsWith("[System]")) {
-                                messageSystemPromptCount++;
-                                messageSystemPromptTotalLength += text.length();
-                                // Check for duplicate system prompts
-                                if (systemBlockCount > 0) {
-                                    duplicateSystemPrompts++;
+            if (request.getMessages() != null) {
+                for (AnthropicMessage msg : request.getMessages()) {
+                    if (msg.getContent() != null) {
+                        for (AnthropicMessage.ContentBlock block : msg.getContent()) {
+                            if ("text".equalsIgnoreCase(block.getType()) && block.getText() != null) {
+                                String text = block.getText();
+                                if (text.startsWith("[System]")) {
+                                    messageSystemPromptCount++;
+                                    messageSystemPromptTotalLength += text.length();
+                                    // Check for duplicate system prompts
+                                    if (systemBlockCount > 0) {
+                                        duplicateSystemPrompts++;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        log.info("Message system prompts: count={}, total_length={}", messageSystemPromptCount, messageSystemPromptTotalLength);
-        log.info("Duplicate system prompts found: {}", duplicateSystemPrompts);
+            log.debug("Message system prompts: count={}, total_length={}", messageSystemPromptCount, messageSystemPromptTotalLength);
+            log.debug("Duplicate system prompts found: {}", duplicateSystemPrompts);
 
-        // Calculate total payload size
-        int totalSize = estimateRequestSize(request);
-        log.info("Estimated request size: {} bytes ({} KB)", totalSize, totalSize / 1024);
+            // Calculate total payload size
+            int totalSize = estimateRequestSize(request);
+            log.debug("Estimated request size: {} bytes ({} KB)", totalSize, totalSize / 1024);
 
-        // Check for potential issues
-        if (messageSystemPromptCount > 0 && systemBlockCount > 0) {
-            log.warn("WARNING: System prompts found in both system blocks and messages - potential duplication");
-        }
+            // Check for potential issues
+            if (messageSystemPromptCount > 0 && systemBlockCount > 0) {
+                log.warn("WARNING: System prompts found in both system blocks and messages - potential duplication");
+            }
 
-        if (messageSystemPromptTotalLength > 100000) { // 100KB
-            log.warn("WARNING: Large system prompts in messages: {} bytes", messageSystemPromptTotalLength);
+            if (messageSystemPromptTotalLength > 100000) { // 100KB
+                log.warn("WARNING: Large system prompts in messages: {} bytes", messageSystemPromptTotalLength);
+            }
         }
     }
 
@@ -434,62 +444,64 @@ public class AnthropicController {
 
     // Log a concise summary of Claude Code request for troubleshooting
     private void logClaudeCodeRequest(String endpoint, AnthropicChatRequest request) {
-        try {
-            int imageCount = 0;
-            int textCount = 0;
-            StringBuilder textSamples = new StringBuilder();
+        if (log.isDebugEnabled()) {
+            try {
+                int imageCount = 0;
+                int textCount = 0;
+                StringBuilder textSamples = new StringBuilder();
 
-            if (request.getMessages() != null && !request.getMessages().isEmpty()) {
-                AnthropicMessage last = request.getMessages().get(request.getMessages().size() - 1);
-                if (last.getContent() != null) {
-                    for (AnthropicMessage.ContentBlock cb : last.getContent()) {
-                        if ("image".equalsIgnoreCase(cb.getType())) {
-                            imageCount++;
-                        } else if ("text".equalsIgnoreCase(cb.getType())) {
-                            textCount++;
-                            if (textSamples.length() < 800) {
-                                String t = cb.getText() == null ? "" : cb.getText();
-                                textSamples.append(truncate(t, 400)).append(" | ");
+                if (request.getMessages() != null && !request.getMessages().isEmpty()) {
+                    AnthropicMessage last = request.getMessages().get(request.getMessages().size() - 1);
+                    if (last.getContent() != null) {
+                        for (AnthropicMessage.ContentBlock cb : last.getContent()) {
+                            if ("image".equalsIgnoreCase(cb.getType())) {
+                                imageCount++;
+                            } else if ("text".equalsIgnoreCase(cb.getType())) {
+                                textCount++;
+                                if (textSamples.length() < 800) {
+                                    String t = cb.getText() == null ? "" : cb.getText();
+                                    textSamples.append(truncate(t, 400)).append(" | ");
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            String toolNames = "";
-            if (request.getTools() != null && !request.getTools().isEmpty()) {
-                StringBuilder tn = new StringBuilder();
-                for (ToolDefinition td : request.getTools()) {
-                    String n = td.getEffectiveName();
-                    if (n != null) tn.append(n).append(',');
+                String toolNames = "";
+                if (request.getTools() != null && !request.getTools().isEmpty()) {
+                    StringBuilder tn = new StringBuilder();
+                    for (ToolDefinition td : request.getTools()) {
+                        String n = td.getEffectiveName();
+                        if (n != null) tn.append(n).append(',');
+                    }
+                    if (tn.length() > 0) tn.setLength(tn.length() - 1);
+                    toolNames = tn.toString();
                 }
-                if (tn.length() > 0) tn.setLength(tn.length() - 1);
-                toolNames = tn.toString();
-            }
 
-            Object choice = request.getToolChoice();
-            String toolChoiceSummary;
-            if (choice instanceof Map<?, ?> m) {
-                String typeStr = String.valueOf(m.get("type"));
-                String nameStr = String.valueOf(m.get("name"));
-                toolChoiceSummary = "type=" + ("null".equals(typeStr) ? "" : typeStr)
-                        + ", name=" + ("null".equals(nameStr) ? "" : nameStr);
-            } else {
-                toolChoiceSummary = String.valueOf(choice);
-            }
+                Object choice = request.getToolChoice();
+                String toolChoiceSummary;
+                if (choice instanceof Map<?, ?> m) {
+                    String typeStr = String.valueOf(m.get("type"));
+                    String nameStr = String.valueOf(m.get("name"));
+                    toolChoiceSummary = "type=" + ("null".equals(typeStr) ? "" : typeStr)
+                            + ", name=" + ("null".equals(nameStr) ? "" : nameStr);
+                } else {
+                    toolChoiceSummary = String.valueOf(choice);
+                }
 
-            log.info("[ClaudeCode] endpoint={}, model={}, stream={}, images={}, texts={}, tool_choice={}, tools={}, text_samples={}",
-                endpoint,
-                request.getModel(),
-                Boolean.TRUE.equals(request.getStream()),
-                imageCount,
-                textCount,
-                toolChoiceSummary,
-                toolNames,
-                truncate(textSamples.toString(), 800)
-            );
-        } catch (Exception e) {
-            log.warn("[ClaudeCode] failed to log request summary: {}", e.getMessage());
+                log.debug("[ClaudeCode] endpoint={}, model={}, stream={}, images={}, texts={}, tool_choice={}, tools={}, text_samples={}",
+                    endpoint,
+                    request.getModel(),
+                    Boolean.TRUE.equals(request.getStream()),
+                    imageCount,
+                    textCount,
+                    toolChoiceSummary,
+                    toolNames,
+                    truncate(textSamples.toString(), 800)
+                );
+            } catch (Exception e) {
+                log.warn("[ClaudeCode] failed to log request summary: {}", e.getMessage());
+            }
         }
     }
 

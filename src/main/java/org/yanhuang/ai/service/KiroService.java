@@ -72,21 +72,31 @@ public class KiroService {
     }
 
     public Flux<String> streamCompletion(AnthropicChatRequest request) {
-        log.info("=== Starting stream completion ===");
+        if (log.isDebugEnabled()) {
+            log.debug("=== Starting stream completion ===");
+        }
         return callKiroEvents(request)
             .map(events -> {
-                log.info("=== Map events to response ===");
+                if (log.isDebugEnabled()) {
+                    log.debug("=== Map events to response ===");
+                }
                 AnthropicChatResponse response = mapResponse(events, request);
-                log.info("Response has {} content blocks", response.getContent() != null ? response.getContent().size() : 0);
-                log.info("Stop reason: {}", response.getStopReason());
+                if (log.isDebugEnabled()) {
+                    log.debug("Response has {} content blocks", response.getContent() != null ? response.getContent().size() : 0);
+                    log.debug("Stop reason: {}", response.getStopReason());
+                }
                 return response;
             })
             .flatMapMany(response -> {
-                log.info("=== Building stream events ===");
+                if (log.isDebugEnabled()) {
+                    log.debug("=== Building stream events ===");
+                }
                 List<String> events = buildStreamEvents(response);
-                log.info("Built {} stream events", events.size());
-                for (int i = 0; i < events.size(); i++) {
-                    log.info("Stream event {}: {}", i, events.get(i));
+                if (log.isDebugEnabled()) {
+                    log.debug("Built {} stream events", events.size());
+                    for (int i = 0; i < events.size(); i++) {
+                        log.debug("Stream event {}: {}", i, events.get(i));
+                    }
                 }
                 return Flux.fromIterable(events);
             });
@@ -96,18 +106,20 @@ public class KiroService {
         ObjectNode payload = buildKiroPayload(request);
         String token = tokenManager.ensureToken();
 
-        log.info("=== Kiro API Request Debug ===");
-        log.info("URL: {}", properties.getKiro().getBaseUrl());
-        log.info("Authorization: Bearer {}...", token.substring(0, Math.min(token.length(), 20)));
-        log.info("Content-Type: {}", MediaType.APPLICATION_JSON);
-        log.info("Accept: {}", MediaType.TEXT_EVENT_STREAM);
-        log.info("Profile ARN: {}", properties.getKiro().getProfileArn());
-        log.info("Payload size: {} characters", payload.toString().length());
-        try {
-            log.info("Payload-from-cc: {}", new ObjectMapper().writeValueAsString(request));
-            log.info("Payload-to-kiro: {}", payload);
-        } catch (JsonProcessingException e) {
-            log.warn("print payload error", e);
+        if (log.isDebugEnabled()) {
+            log.debug("=== Kiro API Request Debug ===");
+            log.debug("URL: {}", properties.getKiro().getBaseUrl());
+            log.debug("Authorization: Bearer {}...", token.substring(0, Math.min(token.length(), 20)));
+            log.debug("Content-Type: {}", MediaType.APPLICATION_JSON);
+            log.debug("Accept: {}", MediaType.TEXT_EVENT_STREAM);
+            log.debug("Profile ARN: {}", properties.getKiro().getProfileArn());
+            log.debug("Payload size: {} characters", payload.toString().length());
+            try {
+                log.debug("Payload-from-cc: {}", new ObjectMapper().writeValueAsString(request));
+                log.debug("Payload-to-kiro: {}", payload);
+            } catch (JsonProcessingException e) {
+                log.warn("print payload error", e);
+            }
         }
 
         return webClient.post()
@@ -119,9 +131,11 @@ public class KiroService {
             .bodyToMono(byte[].class)
             .map(bytes -> {
                 List<JsonNode> events = eventParser.parse(bytes);
-                log.info("Parsed {} events from Kiro response", events.size());
-                for (int i = 0; i < events.size(); i++) {
-                    log.info("Event {}: {}", i, events.get(i).toString());
+                if (log.isDebugEnabled()) {
+                    log.debug("Parsed {} events from Kiro response", events.size());
+                    for (int i = 0; i < events.size(); i++) {
+                        log.debug("Event {}: {}", i, events.get(i).toString());
+                    }
                 }
                 return events;
             })
@@ -143,11 +157,15 @@ public class KiroService {
 
                 return tokenManager.refreshIfNeeded()
                     .flatMap(refreshed -> {
-                        log.info("=== Kiro API Retry Debug ===");
-                        log.info("Token refreshed: {}", refreshed);
-                        log.info("Retrying with new token...");
+                        if (log.isDebugEnabled()) {
+                            log.debug("=== Kiro API Retry Debug ===");
+                            log.debug("Token refreshed: {}", refreshed);
+                            log.debug("Retrying with new token...");
+                        }
                         String newToken = tokenManager.ensureToken();
-                        log.info("New Authorization: Bearer {}...", newToken.substring(0, Math.min(newToken.length(), 20)));
+                        if (log.isDebugEnabled()) {
+                            log.debug("New Authorization: Bearer {}...", newToken.substring(0, Math.min(newToken.length(), 20)));
+                        }
 
                         return webClient.post()
                             .header("Authorization", "Bearer " + newToken)
@@ -175,10 +193,14 @@ public class KiroService {
 
     // Package-private for testing
     ObjectNode buildKiroPayload(AnthropicChatRequest request) {
-        log.info("=== Building Kiro Payload ===");
+        if (log.isDebugEnabled()) {
+            log.debug("=== Building Kiro Payload ===");
+        }
 
         String conversationId = UUID.randomUUID().toString();
-        log.info("Generated conversationId: {}", conversationId);
+        if (log.isDebugEnabled()) {
+            log.debug("Generated conversationId: {}", conversationId);
+        }
 
         ObjectNode conversationState = mapper.createObjectNode();
         conversationState.put("chatTriggerType", "MANUAL");
@@ -194,23 +216,29 @@ public class KiroService {
         userInput.put("modelId", modelId);
         userInput.put("origin", "AI_EDITOR");
 
-        log.info("Current message: content_length={}, modelId={}", content.length(), modelId);
+        if (log.isDebugEnabled()) {
+            log.debug("Current message: content_length={}, modelId={}", content.length(), modelId);
+        }
 
         // Log tools context status
         boolean disableToolsContext = properties.getKiro().isDisableTools();
-        log.info("Tools context disabled: {}", disableToolsContext);
+        if (log.isDebugEnabled()) {
+            log.debug("Tools context disabled: {}", disableToolsContext);
+        }
 
         if (!disableToolsContext && !CollectionUtils.isEmpty(request.getTools())) {
             // Log MCP tool detection
             long mcpToolCount = mcpToolIdentifier.countMcpTools(request.getTools());
             if (mcpToolCount > 0) {
-                log.info("Request contains {} MCP tools out of {} total tools", mcpToolCount, request.getTools().size());
-                // Log detailed MCP tool information
-                mcpToolIdentifier.filterMcpTools(request.getTools()).forEach(tool -> {
-                    String serverName = mcpToolIdentifier.extractMcpServerName(tool.getEffectiveName());
-                    String functionName = mcpToolIdentifier.extractToolFunctionName(tool.getEffectiveName());
-                    log.info("  MCP Tool: server={}, function={}, fullName={}", serverName, functionName, tool.getEffectiveName());
-                });
+                if (log.isDebugEnabled()) {
+                    log.debug("Request contains {} MCP tools out of {} total tools", mcpToolCount, request.getTools().size());
+                    // Log detailed MCP tool information
+                    mcpToolIdentifier.filterMcpTools(request.getTools()).forEach(tool -> {
+                        String serverName = mcpToolIdentifier.extractMcpServerName(tool.getEffectiveName());
+                        String functionName = mcpToolIdentifier.extractToolFunctionName(tool.getEffectiveName());
+                        log.debug("  MCP Tool: server={}, function={}, fullName={}", serverName, functionName, tool.getEffectiveName());
+                    });
+                }
             }
 
             ObjectNode context = mapper.createObjectNode();
@@ -254,7 +282,9 @@ public class KiroService {
         // Add thinking parameter if present (for extended thinking mode)
         if (request.getThinking() != null && !request.getThinking().isEmpty()) {
             userInput.set("thinking", mapper.valueToTree(request.getThinking()));
-            log.info("Extended thinking enabled with config: {}", request.getThinking());
+            if (log.isDebugEnabled()) {
+                log.debug("Extended thinking enabled with config: {}", request.getThinking());
+            }
         }
 
         currentMessage.set("userInputMessage", userInput);
@@ -268,12 +298,14 @@ public class KiroService {
         payload.set("conversationState", conversationState);
 
         // Final payload analysis
-        String payloadString = payload.toString();
-        log.info("=== Kiro Payload Analysis Complete ===");
-        log.info("Final payload size: {} characters ({} KB)", payloadString.length(), payloadString.length() / 1024);
-        log.info("Profile ARN: {}", properties.getKiro().getProfileArn());
-        log.info("History messages: {}", history.size());
-        log.info("Payload preview: {}", truncate(payloadString, 500));
+        if (log.isDebugEnabled()) {
+            String payloadString = payload.toString();
+            log.debug("=== Kiro Payload Analysis Complete ===");
+            log.debug("Final payload size: {} characters ({} KB)", payloadString.length(), payloadString.length() / 1024);
+            log.debug("Profile ARN: {}", properties.getKiro().getProfileArn());
+            log.debug("History messages: {}", history.size());
+            log.debug("Payload preview: {}", truncate(payloadString, 500));
+        }
 
         return payload;
     }
@@ -321,16 +353,22 @@ public class KiroService {
         // Track tool calls being built from streaming events
         Map<String, ToolCallBuilder> toolCallBuilders = new HashMap<>();
 
-        log.debug("=== Parsing {} events from Kiro response ===", events.size());
+        if (log.isDebugEnabled()) {
+            log.debug("=== Parsing {} events from Kiro response ===", events.size());
+        }
         for (int i = 0; i < events.size(); i++) {
             JsonNode event = events.get(i);
-            log.debug("Event {}: {}", i, event.toPrettyString());
+            if (log.isDebugEnabled()) {
+                log.debug("Event {}: {}", i, event.toPrettyString());
+            }
 
             // Handle text content
             if (event.hasNonNull("content")) {
                 String content = event.get("content").asText();
                 contentBuilder.append(content);
-                log.debug("Event {} content: {}", i, content);
+                if (log.isDebugEnabled()) {
+                    log.debug("Event {} content: {}", i, content);
+                }
             }
 
             // Handle tool use events from Kiro
@@ -338,12 +376,16 @@ public class KiroService {
                 String toolUseId = event.get("toolUseId").asText();
                 String name = event.get("name").asText();
 
-                log.debug("Event {} has tool event: name={}, toolUseId={}", i, name, toolUseId);
+                if (log.isDebugEnabled()) {
+                    log.debug("Event {} has tool event: name={}, toolUseId={}", i, name, toolUseId);
+                }
 
                 // Initialize or update tool call builder
                 ToolCallBuilder builder = toolCallBuilders.computeIfAbsent(toolUseId,
                     id -> {
-                        log.debug("Creating new ToolCallBuilder for {}", id);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Creating new ToolCallBuilder for {}", id);
+                        }
                         return new ToolCallBuilder(id, name);
                     });
 
@@ -351,13 +393,17 @@ public class KiroService {
                 if (event.hasNonNull("input")) {
                     String input = event.get("input").asText();
                     builder.appendInput(input);
-                    log.debug("Event {} appending input for {}: {}", i, name, input);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Event {} appending input for {}: {}", i, name, input);
+                    }
                 }
 
                 // Check if this is the final event for this tool call
                 if (event.hasNonNull("stop")) {
                     boolean stopValue = event.get("stop").asBoolean();
-                    log.debug("Event {} has stop field: {}", i, stopValue);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Event {} has stop field: {}", i, stopValue);
+                    }
                     if (stopValue) {
                         ToolCall toolCall = builder.build();
                         toolCalls.add(toolCall);
@@ -365,13 +411,17 @@ public class KiroService {
                             name, builder.getInputBuilder().toString());
                     }
                 } else {
-                    log.debug("Event {} does not have stop field", i);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Event {} does not have stop field", i);
+                    }
                 }
             }
 
             // Fallback: Handle legacy toolCalls field format
             if (event.hasNonNull("toolCalls")) {
-                log.info("Event {} has toolCalls field", i);
+                if (log.isDebugEnabled()) {
+                    log.debug("Event {} has toolCalls field", i);
+                }
                 event.get("toolCalls").forEach(callNode -> {
                     ToolCall call = mapper.convertValue(callNode, ToolCall.class);
                     toolCalls.add(call);
@@ -382,7 +432,9 @@ public class KiroService {
             // Fallback: Parse bracket format from rawText
             if (event.hasNonNull("rawText")) {
                 String rawText = event.get("rawText").asText();
-                log.debug("Event {} rawText: {}", i, rawText);
+                if (log.isDebugEnabled()) {
+                    log.debug("Event {} rawText: {}", i, rawText);
+                }
                 List<ToolCall> bracketCalls = bracketToolCallParser.parse(rawText);
                 if (bracketCalls != null && !bracketCalls.isEmpty()) {
                     log.info("Parsed {} tool calls from bracket format in event {}", bracketCalls.size(), i);
@@ -391,11 +443,15 @@ public class KiroService {
                     }
                     toolCalls.addAll(bracketCalls);
                 } else {
-                    log.debug("No bracket format tool calls found in event {}", i);
+                    if (log.isDebugEnabled()) {
+                        log.debug("No bracket format tool calls found in event {}", i);
+                    }
                 }
             }
         }
-        log.debug("=== Total tool calls found: {} ===", toolCalls.size());
+        if (log.isDebugEnabled()) {
+            log.debug("=== Total tool calls found: {} ===", toolCalls.size());
+        }
 
         List<ToolCall> uniqueToolCalls = toolCallDeduplicator.deduplicate(toolCalls);
 
@@ -473,8 +529,10 @@ public class KiroService {
         int maxHistoryMessages = properties.getKiro().getMaxHistoryMessages();
         boolean disableHistory = properties.getKiro().isDisableHistory();
 
-        log.info("History settings: disabled={}, max_messages={}, actual_messages={}",
-            disableHistory, maxHistoryMessages, historicalMessages.size());
+        if (log.isDebugEnabled()) {
+            log.debug("History settings: disabled={}, max_messages={}, actual_messages={}",
+                disableHistory, maxHistoryMessages, historicalMessages.size());
+        }
 
         if (disableHistory) {
             log.info("History completely disabled");
@@ -500,8 +558,10 @@ public class KiroService {
 
             // Check size limit
             if (totalContentSize + content.length() > maxHistorySize) {
-                log.info("Skipping message due to size limit: current={}, message_size={}, limit={}",
-                    totalContentSize, content.length(), maxHistorySize);
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping message due to size limit: current={}, message_size={}, limit={}",
+                        totalContentSize, content.length(), maxHistorySize);
+                }
                 break;
             }
 
@@ -532,7 +592,9 @@ public class KiroService {
                     .put("modelId", historyModelId)
                     .put("origin", "AI_EDITOR"));
                 history.add(userNode);
-                log.debug("History userInputMessage added: content_length={}", current.content.length());
+                if (log.isDebugEnabled()) {
+                    log.debug("History userInputMessage added: content_length={}", current.content.length());
+                }
 
                 // Look for assistant response
                 if (i + 1 < processedMessages.size() && "assistant".equals(processedMessages.get(i + 1).role)) {
@@ -542,7 +604,9 @@ public class KiroService {
                     assistantNode.set("assistantResponseMessage", mapper.createObjectNode()
                         .put("content", assistant.content));
                     history.add(assistantNode);
-                    log.debug("History assistantResponseMessage added: content_length={}", assistant.content.length());
+                    if (log.isDebugEnabled()) {
+                        log.debug("History assistantResponseMessage added: content_length={}", assistant.content.length());
+                    }
                     i += 2;
                 } else {
                     // No assistant response, add placeholder
@@ -567,14 +631,18 @@ public class KiroService {
                 assistantNode.set("assistantResponseMessage", mapper.createObjectNode()
                     .put("content", current.content));
                 history.add(assistantNode);
-                log.debug("History orphaned assistantResponseMessage added: content_length={}", current.content.length());
+                if (log.isDebugEnabled()) {
+                    log.debug("History orphaned assistantResponseMessage added: content_length={}", current.content.length());
+                }
                 i += 1;
             } else {
                 i += 1;
             }
         }
 
-        log.info("Final history: {} messages, {} characters", history.size(), totalContentSize);
+        if (log.isDebugEnabled()) {
+            log.debug("Final history: {} messages, {} characters", history.size(), totalContentSize);
+        }
 
         return history;
     }
