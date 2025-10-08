@@ -53,8 +53,24 @@ public class AnthropicController {
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
 
-        validateHeaders(resolveApiKey(apiKey, authorization), apiVersion);
-        validateRequest(request);
+        // Enhanced request logging for debugging
+        log.info("=== Claude Code Request Analysis ===");
+        log.info("Endpoint: /v1/messages");
+        log.info("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
+            apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
+            authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
+            apiVersion);
+
+        String resolvedApiKey = resolveApiKey(apiKey, authorization);
+        log.info("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+
+        try {
+            validateHeaders(resolvedApiKey, apiVersion);
+            validateRequest(request);
+        } catch (Exception e) {
+            log.error("Request validation failed: {}", e.getMessage(), e);
+            throw e;
+        }
 
         // Debug: Log full request structure to analyze CC behavior
         if (request.getMessages() != null) {
@@ -62,15 +78,26 @@ public class AnthropicController {
             for (int i = 0; i < request.getMessages().size(); i++) {
                 AnthropicMessage msg = request.getMessages().get(i);
                 int contentLength = 0;
+                int systemPromptLength = 0;
+                int toolResultLength = 0;
+
                 if (msg.getContent() != null) {
                     for (AnthropicMessage.ContentBlock block : msg.getContent()) {
                         if (block.getText() != null) {
                             contentLength += block.getText().length();
+                            // Check for system prompt content
+                            if (block.getText().startsWith("[System]")) {
+                                systemPromptLength += block.getText().length();
+                            }
+                            // Check for tool result content
+                            if (block.getText().startsWith("[Tool ") || block.getText().startsWith("[Called ")) {
+                                toolResultLength += block.getText().length();
+                            }
                         }
                     }
                 }
-                log.info("[DEBUG] Message {}: role={}, content_length={}, content_preview={}",
-                    i, msg.getRole(), contentLength,
+                log.info("[DEBUG] Message {}: role={}, total_length={}, system_prompt_length={}, tool_result_length={}, content_preview={}",
+                    i, msg.getRole(), contentLength, systemPromptLength, toolResultLength,
                     msg.getContent() != null && !msg.getContent().isEmpty() && msg.getContent().get(0).getText() != null
                         ? truncate(msg.getContent().get(0).getText(), 200) : "");
             }
@@ -79,21 +106,43 @@ public class AnthropicController {
         // Log Claude Code incoming request summary (non-streaming)
         logClaudeCodeRequest("/v1/messages", request);
 
+        // Log system prompt analysis
+        analyzeSystemPrompts(request);
+
         String version = StringUtils.hasText(apiVersion) ? apiVersion : properties.getAnthropicVersion();
+        log.info("Using anthropic-version: {}", version);
 
         // Check if streaming is requested
         if (Boolean.TRUE.equals(request.getStream())) {
-            // Force SSE content type for streaming branch
-            Flux<String> sseStream = kiroService.streamCompletion(request)
-                .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n")
-                .concatWithValues("data: [DONE]\n");
-            return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_EVENT_STREAM)
-                .header("anthropic-version", version)
-                .body(sseStream);
+            log.info("Processing as streaming request");
+            try {
+                // Force SSE content type for streaming branch
+                Flux<String> sseStream = kiroService.streamCompletion(request)
+                    .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n")
+                    .concatWithValues("data: [DONE]\n")
+                    .doOnNext(event -> log.debug("Streaming event: {}", truncate(event, 200)))
+                    .doOnError(error -> log.error("Streaming error: {}", error.getMessage(), error))
+                    .doOnComplete(() -> log.info("Streaming completed successfully"));
+
+                log.info("Returning streaming response");
+                return ResponseEntity.ok()
+                    .contentType(MediaType.TEXT_EVENT_STREAM)
+                    .header("anthropic-version", version)
+                    .body(sseStream);
+            } catch (Exception e) {
+                log.error("Failed to create streaming response: {}", e.getMessage(), e);
+                throw e;
+            }
         } else {
-            // Return non-streaming response directly (anthropic-version is added via actual HTTP response in E2E)
-            return kiroService.createCompletion(request);
+            log.info("Processing as non-streaming request");
+            try {
+                Object response = kiroService.createCompletion(request);
+                log.info("Non-streaming request completed successfully");
+                return response;
+            } catch (Exception e) {
+                log.error("Failed to create non-streaming response: {}", e.getMessage(), e);
+                throw e;
+            }
         }
     }
 
@@ -104,17 +153,47 @@ public class AnthropicController {
         @RequestHeader(name = "anthropic-version", required = false) String apiVersion,
         @RequestBody AnthropicChatRequest request) {
 
-        validateHeaders(resolveApiKey(apiKey, authorization), apiVersion);
-        validateRequest(request);
+        log.info("=== Claude Code Streaming Request Analysis ===");
+        log.info("Endpoint: /v1/messages/stream");
+        log.info("Headers: x-api-key={}, Authorization={}, anthropic-version={}",
+            apiKey != null ? "present(" + apiKey.length() + " chars)" : "missing",
+            authorization != null ? "present(" + authorization.length() + " chars)" : "missing",
+            apiVersion);
+
+        String resolvedApiKey = resolveApiKey(apiKey, authorization);
+        log.info("Resolved API key: {}", resolvedApiKey != null ? "present(" + resolvedApiKey.length() + " chars)" : "missing");
+
+        try {
+            validateHeaders(resolvedApiKey, apiVersion);
+            validateRequest(request);
+        } catch (Exception e) {
+            log.error("Streaming request validation failed: {}", e.getMessage(), e);
+            throw e;
+        }
 
         // Log Claude Code incoming request summary (streaming)
         logClaudeCodeRequest("/v1/messages/stream", request);
 
-        Flux<String> sseStream = kiroService.streamCompletion(request)
-            .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n");
-        return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_EVENT_STREAM)
-            .body(sseStream);
+        // Log system prompt analysis
+        analyzeSystemPrompts(request);
+
+        try {
+            log.info("Creating streaming response");
+            Flux<String> sseStream = kiroService.streamCompletion(request)
+                .map(content -> (content.startsWith("event:") || content.startsWith("data:")) ? content : "data: " + content + "\n")
+                .doOnNext(event -> log.debug("Streaming event: {}", truncate(event, 200)))
+                .doOnError(error -> log.error("Streaming error: {}", error.getMessage(), error))
+                .doOnComplete(() -> log.info("Streaming completed successfully"));
+
+            log.info("Returning streaming response");
+            return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("anthropic-version", StringUtils.hasText(apiVersion) ? apiVersion : properties.getAnthropicVersion())
+                .body(sseStream);
+        } catch (Exception e) {
+            log.error("Failed to create streaming response: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     private void validateHeaders(String apiKey, String apiVersion) {
@@ -258,6 +337,96 @@ public class AnthropicController {
                 // Unknown type
                 throw new IllegalArgumentException("tool_choice.type must be one of: auto, any, tool, none, required");
         }
+    }
+
+    // Analyze system prompts in the request
+    private void analyzeSystemPrompts(AnthropicChatRequest request) {
+        log.info("=== System Prompt Analysis ===");
+
+        // Count system prompts in system blocks
+        int systemBlockCount = 0;
+        int systemBlockTotalLength = 0;
+        if (request.getSystem() != null && !request.getSystem().isEmpty()) {
+            systemBlockCount = request.getSystem().size();
+            for (AnthropicMessage.ContentBlock block : request.getSystem()) {
+                if (block.getText() != null) {
+                    systemBlockTotalLength += block.getText().length();
+                }
+            }
+            log.info("System blocks: count={}, total_length={}", systemBlockCount, systemBlockTotalLength);
+        }
+
+        // Count system prompts embedded in messages
+        int messageSystemPromptCount = 0;
+        int messageSystemPromptTotalLength = 0;
+        int duplicateSystemPrompts = 0;
+
+        if (request.getMessages() != null) {
+            for (AnthropicMessage msg : request.getMessages()) {
+                if (msg.getContent() != null) {
+                    for (AnthropicMessage.ContentBlock block : msg.getContent()) {
+                        if ("text".equalsIgnoreCase(block.getType()) && block.getText() != null) {
+                            String text = block.getText();
+                            if (text.startsWith("[System]")) {
+                                messageSystemPromptCount++;
+                                messageSystemPromptTotalLength += text.length();
+                                // Check for duplicate system prompts
+                                if (systemBlockCount > 0) {
+                                    duplicateSystemPrompts++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        log.info("Message system prompts: count={}, total_length={}", messageSystemPromptCount, messageSystemPromptTotalLength);
+        log.info("Duplicate system prompts found: {}", duplicateSystemPrompts);
+
+        // Calculate total payload size
+        int totalSize = estimateRequestSize(request);
+        log.info("Estimated request size: {} bytes ({} KB)", totalSize, totalSize / 1024);
+
+        // Check for potential issues
+        if (messageSystemPromptCount > 0 && systemBlockCount > 0) {
+            log.warn("WARNING: System prompts found in both system blocks and messages - potential duplication");
+        }
+
+        if (messageSystemPromptTotalLength > 100000) { // 100KB
+            log.warn("WARNING: Large system prompts in messages: {} bytes", messageSystemPromptTotalLength);
+        }
+    }
+
+    // Estimate total request size
+    private int estimateRequestSize(AnthropicChatRequest request) {
+        int size = 500; // Base JSON structure
+
+        if (request.getSystem() != null) {
+            for (AnthropicMessage.ContentBlock block : request.getSystem()) {
+                if (block.getText() != null) {
+                    size += block.getText().length();
+                }
+            }
+        }
+
+        if (request.getMessages() != null) {
+            for (AnthropicMessage msg : request.getMessages()) {
+                if (msg.getContent() != null) {
+                    for (AnthropicMessage.ContentBlock block : msg.getContent()) {
+                        if (block.getText() != null) {
+                            size += block.getText().length();
+                        }
+                    }
+                }
+            }
+        }
+
+        if (request.getTools() != null) {
+            size += request.getTools().size() * 200; // Approximate tool definition size
+        }
+
+        return size;
     }
 
     // Log a concise summary of Claude Code request for troubleshooting

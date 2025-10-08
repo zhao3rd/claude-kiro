@@ -43,10 +43,20 @@ public class TokenManager {
     }
 
     public Mono<String> refreshIfNeeded() {
+        log.info("=== Token Refresh Analysis ===");
+
         Instant now = Instant.now();
         Duration elapsed = Duration.between(lastRefresh.get(), now);
+
+        log.info("Current token status: has_token={}, token_length={}, last_refresh={}, elapsed_seconds={}",
+            accessToken.get() != null && !accessToken.get().isBlank(),
+            accessToken.get() != null ? accessToken.get().length() : 0,
+            lastRefresh.get(),
+            elapsed.getSeconds());
+
         if (elapsed.getSeconds() < properties.getKiro().getMinRefreshIntervalSeconds()) {
-            log.info("Skip token refresh because of throttle window");
+            log.info("Skip token refresh because of throttle window: {} < {} seconds",
+                elapsed.getSeconds(), properties.getKiro().getMinRefreshIntervalSeconds());
             return Mono.just(ensureToken());
         }
 
@@ -56,22 +66,37 @@ public class TokenManager {
             return Mono.just(ensureToken());
         }
 
+        log.info("Initiating token refresh to: {}", properties.getKiro().getRefreshUrl());
+        log.info("Refresh token present: {} (length: {})",
+            refreshToken != null && !refreshToken.isBlank(),
+            refreshToken != null ? refreshToken.length() : 0);
+
         return webClient.post()
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(new RefreshRequest(refreshToken))
             .retrieve()
             .bodyToMono(RefreshResponse.class)
-            .map(response -> {
+            .doOnSuccess(response -> {
                 if (response != null && response.accessToken() != null && !response.accessToken().isBlank()) {
+                    log.info("Token refresh successful: new_token_length={}", response.accessToken().length());
                     accessToken.set(response.accessToken());
                     lastRefresh.set(Instant.now());
+                } else {
+                    log.warn("Refresh response missing accessToken, reuse existing token");
+                }
+            })
+            .doOnError(error -> {
+                log.error("Token refresh failed: error_type={}, message={}",
+                    error.getClass().getSimpleName(), error.getMessage());
+            })
+            .map(response -> {
+                if (response != null && response.accessToken() != null && !response.accessToken().isBlank()) {
                     return response.accessToken();
                 }
-                log.warn("Refresh response missing accessToken, reuse existing token");
                 return ensureToken();
             })
             .onErrorResume(ex -> {
-                log.error("Failed to refresh token", ex);
+                log.error("Failed to refresh token, falling back to existing token", ex);
                 return Mono.just(ensureToken());
             });
     }

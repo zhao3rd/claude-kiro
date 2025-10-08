@@ -168,17 +168,28 @@ public class KiroService {
     }
 
     private ObjectNode buildKiroPayload(AnthropicChatRequest request) {
+        log.info("=== Building Kiro Payload ===");
+
+        String conversationId = UUID.randomUUID().toString();
+        log.info("Generated conversationId: {}", conversationId);
+
         ObjectNode conversationState = mapper.createObjectNode();
         conversationState.put("chatTriggerType", "MANUAL");
-        conversationState.put("conversationId", UUID.randomUUID().toString());
+        conversationState.put("conversationId", conversationId);
 
         ObjectNode currentMessage = mapper.createObjectNode();
         ObjectNode userInput = mapper.createObjectNode();
-        userInput.put("content", buildCurrentMessageContent(request));
-        userInput.put("modelId", mapModel(request.getModel()));
+
+        String content = buildCurrentMessageContent(request);
+        String modelId = mapModel(request.getModel());
+
+        userInput.put("content", content);
+        userInput.put("modelId", modelId);
         userInput.put("origin", "AI_EDITOR");
 
-        // Temporarily disable tools context to debug 400 error
+        log.info("Current message: content_length={}, modelId={}", content.length(), modelId);
+
+        // Log tools context status
         boolean disableToolsContext = properties.getKiro().isDisableTools();
         log.info("Tools context disabled: {}", disableToolsContext);
 
@@ -241,12 +252,22 @@ public class KiroService {
 
         currentMessage.set("userInputMessage", userInput);
 
+        ArrayNode history = buildHistory(request);
         conversationState.set("currentMessage", currentMessage);
-        conversationState.set("history", buildHistory(request));
+        conversationState.set("history", history);
 
         ObjectNode payload = mapper.createObjectNode();
         payload.put("profileArn", properties.getKiro().getProfileArn());
         payload.set("conversationState", conversationState);
+
+        // Final payload analysis
+        String payloadString = payload.toString();
+        log.info("=== Kiro Payload Analysis Complete ===");
+        log.info("Final payload size: {} characters ({} KB)", payloadString.length(), payloadString.length() / 1024);
+        log.info("Profile ARN: {}", properties.getKiro().getProfileArn());
+        log.info("History messages: {}", history.size());
+        log.info("Payload preview: {}", truncate(payloadString, 500));
+
         return payload;
     }
 
@@ -867,6 +888,12 @@ public class KiroService {
 
             return call;
         }
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        if (s.length() <= max) return s;
+        return s.substring(0, Math.max(0, max - 3)) + "...";
     }
 
 }

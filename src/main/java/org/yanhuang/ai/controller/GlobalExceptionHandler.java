@@ -17,14 +17,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<AnthropicErrorResponse> handleBadRequest(IllegalArgumentException ex) {
-        log.debug("Bad request: {}", ex.getMessage());
+        log.error("=== IllegalArgumentException Handler ===");
+        log.error("Error: {}", ex.getMessage());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.invalidRequest(ex.getMessage(), null);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<AnthropicErrorResponse> handleIllegalState(IllegalStateException ex) {
-        log.debug("Illegal state: {}", ex.getMessage());
+        log.error("=== IllegalStateException Handler ===");
+        log.error("Error: {}", ex.getMessage());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.fromException(ex);
         HttpStatus status = ex.getMessage() != null && ex.getMessage().toLowerCase().contains("api key")
             ? HttpStatus.UNAUTHORIZED
@@ -34,14 +40,24 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(WebClientResponseException.TooManyRequests.class)
     public ResponseEntity<AnthropicErrorResponse> handleRateLimit(WebClientResponseException.TooManyRequests ex) {
-        log.debug("Rate limit exceeded: {}", ex.getMessage());
+        log.error("=== TooManyRequests Exception Handler ===");
+        log.error("Status Code: {}", ex.getStatusCode());
+        log.error("Status Text: {}", ex.getStatusText());
+        log.error("Response Body: {}", ex.getResponseBodyAsString());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.rateLimitError("Rate limit exceeded");
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(errorResponse);
     }
 
     @ExceptionHandler(WebClientResponseException.Unauthorized.class)
     public ResponseEntity<AnthropicErrorResponse> handleUnauthorized(WebClientResponseException.Unauthorized ex) {
-        log.debug("Unauthorized: {}", ex.getMessage());
+        log.error("=== Unauthorized Exception Handler ===");
+        log.error("Status Code: {}", ex.getStatusCode());
+        log.error("Status Text: {}", ex.getStatusText());
+        log.error("Response Body: {}", ex.getResponseBodyAsString());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.authenticationError("Authentication failed");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
     }
@@ -62,14 +78,24 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(WebClientResponseException.class)
     public ResponseEntity<AnthropicErrorResponse> handleWebClientError(WebClientResponseException ex) {
-        log.error("Web client error: {} - {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+        log.error("=== WebClientResponseException Handler ===");
+        log.error("Status Code: {}", ex.getStatusCode());
+        log.error("Status Text: {}", ex.getStatusText());
+        log.error("Response Body: {}", ex.getResponseBodyAsString());
+        log.error("Headers: {}", ex.getHeaders());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.apiError("External API error");
         return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<AnthropicErrorResponse> handleGeneric(Exception ex) {
-        log.error("Unhandled exception", ex);
+        log.error("=== Generic Exception Handler ===");
+        log.error("Error Type: {}", ex.getClass().getSimpleName());
+        log.error("Error Message: {}", ex.getMessage());
+        log.error("Stack trace: ", ex);
+
         AnthropicErrorResponse errorResponse = AnthropicErrorResponse.internalServerError("Internal server error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
     }
