@@ -1,6 +1,8 @@
 spring:
   application:
     name: claude-kiro
+  codec:
+    max-in-memory-size: 32MB
 
 logging:
   level:

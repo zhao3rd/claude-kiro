@@ -104,7 +104,7 @@ mvn test -Dtest=AnthropicControllerTest
 
 Current model mappings (defined in `KiroService.mapModel()`):
 - `claude-sonnet-4-5-20250929` → `CLAUDE_SONNET_4_5_20250929_V1_0`
-- `claude-3-5-haiku-20241022` → `CLAUDE_3_7_SONNET_20250219_V1_0`
+- `claude-3-5-haiku-20241022` → `auto`
 - Default fallback to `CLAUDE_SONNET_4_5_20250929_V1_0`
 
 ## Development Notes

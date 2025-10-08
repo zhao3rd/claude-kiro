@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -102,7 +103,12 @@ public class KiroService {
         log.info("Accept: {}", MediaType.TEXT_EVENT_STREAM);
         log.info("Profile ARN: {}", properties.getKiro().getProfileArn());
         log.info("Payload size: {} characters", payload.toString().length());
-        log.info("Payload: {}", payload.toString());
+        try {
+            log.info("Payload-from-cc: {}", new ObjectMapper().writeValueAsString(request));
+            log.info("Payload-to-kiro: {}", payload);
+        } catch (JsonProcessingException e) {
+            log.warn("print payload error", e);
+        }
 
         return webClient.post()
             .header("Authorization", "Bearer " + token)
@@ -167,7 +173,8 @@ public class KiroService {
             });
     }
 
-    private ObjectNode buildKiroPayload(AnthropicChatRequest request) {
+    // Package-private for testing
+    ObjectNode buildKiroPayload(AnthropicChatRequest request) {
         log.info("=== Building Kiro Payload ===");
 
         String conversationId = UUID.randomUUID().toString();
@@ -482,39 +489,107 @@ public class KiroService {
                 skipCount, maxHistoryMessages);
         }
 
-        final int[] totalContentSize = {0};
+        // Step 1: Process messages into (role, content) pairs
+        // This step merges tool results and handles special cases
+        List<MessagePair> processedMessages = new ArrayList<>();
         final int maxHistorySize = properties.getKiro().getMaxHistorySize();
+        int totalContentSize = 0;
 
-        historicalMessages.forEach(message -> {
+        for (AnthropicMessage message : historicalMessages) {
             String content = buildMessageContent(message);
 
-            // Check if adding this message would exceed size limit
-            if (totalContentSize[0] + content.length() > maxHistorySize) {
+            // Check size limit
+            if (totalContentSize + content.length() > maxHistorySize) {
                 log.info("Skipping message due to size limit: current={}, message_size={}, limit={}",
-                    totalContentSize[0], content.length(), maxHistorySize);
-                return;
+                    totalContentSize, content.length(), maxHistorySize);
+                break;
             }
 
-            totalContentSize[0] += content.length();
+            totalContentSize += content.length();
 
             if ("user".equalsIgnoreCase(message.getRole())) {
+                processedMessages.add(new MessagePair("user", content));
+            } else if ("assistant".equalsIgnoreCase(message.getRole())) {
+                processedMessages.add(new MessagePair("assistant", content));
+            }
+            // Note: tool messages are not directly supported in Anthropic format
+            // They would be part of content blocks in user/assistant messages
+        }
+
+        // Step 2: Build history pairs ensuring alternating pattern
+        // According to ki2api/app.py (lines 695-742), history must strictly alternate:
+        // userInputMessage -> assistantResponseMessage -> userInputMessage -> assistantResponseMessage
+        String historyModelId = mapModel(request.getModel());
+        int i = 0;
+        while (i < processedMessages.size()) {
+            MessagePair current = processedMessages.get(i);
+
+            if ("user".equals(current.role)) {
+                // Add userInputMessage
                 ObjectNode userNode = mapper.createObjectNode();
                 userNode.set("userInputMessage", mapper.createObjectNode()
-                    .put("content", content)
-                    .put("modelId", "auto")
+                    .put("content", current.content)
+                    .put("modelId", historyModelId)
                     .put("origin", "AI_EDITOR"));
                 history.add(userNode);
-            } else if ("assistant".equalsIgnoreCase(message.getRole())) {
+                log.debug("History userInputMessage added: content_length={}", current.content.length());
+
+                // Look for assistant response
+                if (i + 1 < processedMessages.size() && "assistant".equals(processedMessages.get(i + 1).role)) {
+                    // Found paired assistant response
+                    MessagePair assistant = processedMessages.get(i + 1);
+                    ObjectNode assistantNode = mapper.createObjectNode();
+                    assistantNode.set("assistantResponseMessage", mapper.createObjectNode()
+                        .put("content", assistant.content));
+                    history.add(assistantNode);
+                    log.debug("History assistantResponseMessage added: content_length={}", assistant.content.length());
+                    i += 2;
+                } else {
+                    // No assistant response, add placeholder
+                    ObjectNode assistantNode = mapper.createObjectNode();
+                    assistantNode.set("assistantResponseMessage", mapper.createObjectNode()
+                        .put("content", "I understand."));
+                    history.add(assistantNode);
+                    log.debug("History assistantResponseMessage placeholder added");
+                    i += 1;
+                }
+            } else if ("assistant".equals(current.role)) {
+                // Orphaned assistant message - add placeholder user message first
+                ObjectNode userNode = mapper.createObjectNode();
+                userNode.set("userInputMessage", mapper.createObjectNode()
+                    .put("content", "Continue")
+                    .put("modelId", historyModelId)
+                    .put("origin", "AI_EDITOR"));
+                history.add(userNode);
+                log.debug("History userInputMessage placeholder added for orphaned assistant");
+
                 ObjectNode assistantNode = mapper.createObjectNode();
                 assistantNode.set("assistantResponseMessage", mapper.createObjectNode()
-                    .put("content", content));
+                    .put("content", current.content));
                 history.add(assistantNode);
+                log.debug("History orphaned assistantResponseMessage added: content_length={}", current.content.length());
+                i += 1;
+            } else {
+                i += 1;
             }
-        });
+        }
 
-        log.info("Final history: {} messages, {} characters", history.size(), totalContentSize[0]);
+        log.info("Final history: {} messages, {} characters", history.size(), totalContentSize);
 
         return history;
+    }
+
+    /**
+     * Helper class to hold processed message pairs
+     */
+    private static class MessagePair {
+        final String role;
+        final String content;
+
+        MessagePair(String role, String content) {
+            this.role = role;
+            this.content = content;
+        }
     }
 
     private String buildMessageContent(AnthropicMessage message) {
@@ -849,9 +924,7 @@ public class KiroService {
 
     private String mapModel(String modelId) {
         return switch (modelId) {
-            case "claude-sonnet-4-5-20250929" -> "CLAUDE_SONNET_4_5_20250929_V1_0";
-            case "claude-3-5-sonnet-20241022" -> "auto";
-            case "claude-3-5-haiku-20241022" -> "auto";
+            case "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022" -> "auto";
             default -> "CLAUDE_SONNET_4_5_20250929_V1_0";
         };
     }

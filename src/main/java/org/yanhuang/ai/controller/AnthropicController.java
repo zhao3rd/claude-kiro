@@ -244,7 +244,10 @@ public class AnthropicController {
             });
         });
         if (Boolean.TRUE.equals(request.getStream()) && request.getMaxTokens() != null && request.getMaxTokens() > 4096) {
-            throw new IllegalArgumentException("max_tokens exceeds streaming limit");
+            // Soft-cap max_tokens for streaming to improve compatibility with clients like Claude Code
+            // Instead of rejecting the request, cap to the supported limit and continue
+            log.warn("max_tokens {} exceeds streaming limit {}; capping to limit", request.getMaxTokens(), 4096);
+            request.setMaxTokens(4096);
         }
         // Enhanced tool_choice validation
         if (request.getToolChoice() != null && !request.getToolChoice().isEmpty()) {
