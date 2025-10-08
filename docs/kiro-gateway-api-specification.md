@@ -183,7 +183,7 @@ data: {...}
 | conversationId | 不能为空字符串 | 400 BAD_REQUEST |
 | modelId | 必须为有效模型ID | 400 BAD_REQUEST |
 | toolSpecification | 必须包含完整字段 | 400 BAD_REQUEST |
-| history 结构 | 消息对象结构必须一致 | 400 BAD_REQUEST |
+| history 结构 | 必须严格遵循 `userInputMessage` -> `assistantResponseMessage` 的交替模式。不匹配的或孤立的消息会导致错误。 | 400 BAD_REQUEST |
 
 ### 5.3 支持的模型ID
 
@@ -202,7 +202,7 @@ data: {...}
 |---------|------|---------|
 | "Improperly formed request." | conversationId 为空 | 使用有效的 UUID |
 | "Improperly formed request." | 工具定义不完整 | 确保包含 name、description、inputSchema |
-| "Improperly formed request." | 历史记录结构不一致 | 检查消息对象结构 |
+| "Improperly formed request." | 历史记录结构不一致，未遵循严格的 `user`/`assistant` 交T替模式。 | 确保每个 `userInputMessage` 后都跟随一个 `assistantResponseMessage`。对于不成对的消息，需要插入占位符。 |
 | "Invalid model. Please select a different model to continue." | 无效的 modelId | 使用支持的模型ID |
 
 ### 6.2 403 FORBIDDEN
@@ -224,7 +224,9 @@ data: {...}
 1. **conversationId**: 为每个请求生成新的 UUID
 2. **content 格式**: 使用 `[System] ... \n[user] ...` 格式
 3. **工具定义**: 确保每个工具包含完整的 name、description 和 inputSchema
-4. **历史记录**: 保持用户消息和助手回复的成对结构
+4. **历史记录**: 严格遵守 `userInputMessage` -> `assistantResponseMessage` 的交替模式。
+           - 如果用户消息后没有对应的助手回复，应插入一个占位符助手消息（例如 `{"content": "I understand."}`）。
+           - 如果出现孤立的助手消息，应在其前插入一个占位符用户消息（例如 `{"content": "Continue"}`）。
 
 ### 7.2 错误处理
 

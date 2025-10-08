@@ -8,6 +8,18 @@ Anthropic Claude-compatible API service backed by Kiro CodeWhisperer gateway.
 - **Spring Boot Architecture**: Built on Spring Boot WebFlux, supporting reactive programming model.
 - **Observability**: Built-in Actuator endpoints for easy monitoring and maintenance.
 
+## API Compatibility and Adaptations
+This service acts as an adapter to the backend Kiro Gateway, not a transparent proxy. As such, some fields from the standard Anthropic Claude API request are intentionally ignored because they are not supported by the Kiro Gateway.
+
+The following request parameters are **ignored**:
+- `temperature`
+- `top_p`
+- `top_k`
+- `max_tokens`
+- `metadata`
+
+Additionally, image data is not forwarded; only a textual placeholder for the image is sent to the backend.
+
 ## Requirements
 - Java 21
 - Maven 3.9 or above
