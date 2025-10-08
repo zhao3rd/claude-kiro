@@ -23,8 +23,8 @@ app:
     min-refresh-interval-seconds: ${KIRO_REFRESH_MIN_INTERVAL:5}
     disable-tools: ${KIRO_DISABLE_TOOLS:false}
     disable-history: ${KIRO_DISABLE_HISTORY:false}
-    max-history-messages: ${KIRO_MAX_HISTORY_MESSAGES:10}
-    max-history-size: ${KIRO_MAX_HISTORY_SIZE:131072}
+    max-history-messages: ${KIRO_MAX_HISTORY_MESSAGES:100}
+    max-history-size: ${KIRO_MAX_HISTORY_SIZE:180000}
 
 server:
   port: 7860
