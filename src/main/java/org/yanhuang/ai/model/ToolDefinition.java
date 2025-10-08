@@ -1,13 +1,14 @@
 package org.yanhuang.ai.model;
 
+import java.util.HashMap;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class ToolDefinition {
 
     private String name;
@@ -22,6 +23,8 @@ public class ToolDefinition {
 
     @JsonProperty("function")
     private Map<String, Object> function;
+
+    private final Map<String, Object> additionalProperties = new HashMap<>();
 
     public String getName() {
         return name;
@@ -102,5 +105,14 @@ public class ToolDefinition {
         }
         return null;
     }
-}
 
+    @JsonAnySetter
+    public void addAdditionalProperty(String key, Object value) {
+        this.additionalProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getAdditionalProperties() {
+        return additionalProperties;
+    }
+}

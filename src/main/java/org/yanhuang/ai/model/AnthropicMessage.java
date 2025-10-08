@@ -2,9 +2,12 @@ package org.yanhuang.ai.model;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonParser;
@@ -22,6 +25,12 @@ public class AnthropicMessage {
     @JsonDeserialize(using = ContentDeserializer.class)
     private List<ContentBlock> content;
 
+    private Map<String, Object> metadata;
+
+    private List<Attachment> attachments;
+
+    private final Map<String, Object> additionalProperties = new HashMap<>();
+
     public String getRole() {
         return role;
     }
@@ -38,8 +47,33 @@ public class AnthropicMessage {
         this.content = content;
     }
 
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata;
+    }
+
+    public List<Attachment> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(List<Attachment> attachments) {
+        this.attachments = attachments;
+    }
+
+    @JsonAnySetter
+    public void addAdditionalProperty(String key, Object value) {
+        this.additionalProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getAdditionalProperties() {
+        return additionalProperties;
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class ContentBlock {
         private String type;
         private String text;
@@ -57,9 +91,23 @@ public class AnthropicMessage {
         // image fields
         private ImageSource source;
 
+        private List<Map<String, Object>> citations;
+
+        @JsonProperty("is_error")
+        private Boolean isError;
+
+        private String status;
+
+        @JsonProperty("status_details")
+        private Map<String, Object> statusDetails;
+
+        private Map<String, Object> metadata;
+
         // optional cache control hints from clients (e.g., {"type":"ephemeral"})
         @com.fasterxml.jackson.annotation.JsonProperty("cache_control")
         private java.util.Map<String, Object> cacheControl;
+
+        private final Map<String, Object> additionalProperties = new HashMap<>();
 
         public String getType() {
             return type;
@@ -132,6 +180,56 @@ public class AnthropicMessage {
         public void setCacheControl(java.util.Map<String, Object> cacheControl) {
             this.cacheControl = cacheControl;
         }
+
+        public List<Map<String, Object>> getCitations() {
+            return citations;
+        }
+
+        public void setCitations(List<Map<String, Object>> citations) {
+            this.citations = citations;
+        }
+
+        public Boolean getIsError() {
+            return isError;
+        }
+
+        public void setIsError(Boolean isError) {
+            this.isError = isError;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public Map<String, Object> getStatusDetails() {
+            return statusDetails;
+        }
+
+        public void setStatusDetails(Map<String, Object> statusDetails) {
+            this.statusDetails = statusDetails;
+        }
+
+        public Map<String, Object> getMetadata() {
+            return metadata;
+        }
+
+        public void setMetadata(Map<String, Object> metadata) {
+            this.metadata = metadata;
+        }
+
+        @JsonAnySetter
+        public void addAdditionalProperty(String key, Object value) {
+            this.additionalProperties.put(key, value);
+        }
+
+        @JsonAnyGetter
+        public Map<String, Object> getAdditionalProperties() {
+            return additionalProperties;
+        }
     }
 
     /**
@@ -144,7 +242,13 @@ public class AnthropicMessage {
         @JsonProperty("media_type")
         private String mediaType;  // "image/jpeg", "image/png", "image/gif", "image/webp"
 
-        private String data;  // base64-encoded image data or URL string
+        // For type="base64"
+        private String data;  // base64-encoded image data
+
+        // For type="url"
+        private String url;   // remote image URL
+
+        private final Map<String, Object> additionalProperties = new HashMap<>();
 
         public String getType() {
             return type;
@@ -168,6 +272,71 @@ public class AnthropicMessage {
 
         public void setData(String data) {
             this.data = data;
+        }
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
+
+        @JsonAnySetter
+        public void addAdditionalProperty(String key, Object value) {
+            this.additionalProperties.put(key, value);
+        }
+
+        @JsonAnyGetter
+        public Map<String, Object> getAdditionalProperties() {
+            return additionalProperties;
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class Attachment {
+
+        @JsonProperty("file_id")
+        private String fileId;
+
+        private List<Map<String, Object>> tools;
+
+        private Map<String, Object> metadata;
+
+        private final Map<String, Object> additionalProperties = new HashMap<>();
+
+        public String getFileId() {
+            return fileId;
+        }
+
+        public void setFileId(String fileId) {
+            this.fileId = fileId;
+        }
+
+        public List<Map<String, Object>> getTools() {
+            return tools;
+        }
+
+        public void setTools(List<Map<String, Object>> tools) {
+            this.tools = tools;
+        }
+
+        public Map<String, Object> getMetadata() {
+            return metadata;
+        }
+
+        public void setMetadata(Map<String, Object> metadata) {
+            this.metadata = metadata;
+        }
+
+        @JsonAnySetter
+        public void addAdditionalProperty(String key, Object value) {
+            this.additionalProperties.put(key, value);
+        }
+
+        @JsonAnyGetter
+        public Map<String, Object> getAdditionalProperties() {
+            return additionalProperties;
         }
     }
 
@@ -211,4 +380,3 @@ public class AnthropicMessage {
         }
     }
 }
-
