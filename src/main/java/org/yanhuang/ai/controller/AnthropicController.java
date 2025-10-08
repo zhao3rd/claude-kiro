@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -54,6 +55,26 @@ public class AnthropicController {
 
         validateHeaders(resolveApiKey(apiKey, authorization), apiVersion);
         validateRequest(request);
+
+        // Debug: Log full request structure to analyze CC behavior
+        if (request.getMessages() != null) {
+            log.info("[DEBUG] Total messages in request: {}", request.getMessages().size());
+            for (int i = 0; i < request.getMessages().size(); i++) {
+                AnthropicMessage msg = request.getMessages().get(i);
+                int contentLength = 0;
+                if (msg.getContent() != null) {
+                    for (AnthropicMessage.ContentBlock block : msg.getContent()) {
+                        if (block.getText() != null) {
+                            contentLength += block.getText().length();
+                        }
+                    }
+                }
+                log.info("[DEBUG] Message {}: role={}, content_length={}, content_preview={}",
+                    i, msg.getRole(), contentLength,
+                    msg.getContent() != null && !msg.getContent().isEmpty() && msg.getContent().get(0).getText() != null
+                        ? truncate(msg.getContent().get(0).getText(), 200) : "");
+            }
+        }
 
         // Log Claude Code incoming request summary (non-streaming)
         logClaudeCodeRequest("/v1/messages", request);
@@ -304,6 +325,25 @@ public class AnthropicController {
         if (s == null) return "";
         if (s.length() <= max) return s;
         return s.substring(0, Math.max(0, max - 3)) + "...";
+    }
+
+    /**
+     * Health check endpoint for monitoring application status
+     */
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        log.info("[Health] Health check requested");
+
+        Map<String, Object> health = Map.of(
+            "status", "healthy",
+            "timestamp", System.currentTimeMillis(),
+            "service", "claude-kiro",
+            "version", "1.0.0",
+            "kiroProfile", properties.getKiro().getProfileArn() != null ? "configured" : "missing",
+            "toolsDisabled", System.getProperty("kiro.disable.tools", "false")
+        );
+
+        return ResponseEntity.ok(health);
     }
 }
 

@@ -51,7 +51,8 @@
       "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=\"ClaudeChatE2ETest#testMultiRoundConversation\" -q)",
       "Bash(JAVA_HOME=\"$JAVA21_HOME\" PATH=\"$JAVA21_HOME/bin:$PATH\" mvn test -Dtest=\"ClaudeChatE2ETest#testBasicChatConversation\" -q -X)",
       "mcp__sequential-thinking__sequentialthinking",
-      "WebSearch"
+      "WebSearch",
+      "Read(//data/code-src/tools/ki2api/**)"
     ],
     "additionalDirectories": [
       "d:\\code\\tools\\ki2api\\"

@@ -81,6 +81,14 @@ public class AppProperties {
 
         private int minRefreshIntervalSeconds = 5;
 
+        private boolean disableTools = false;
+
+        private boolean disableHistory = false;
+
+        private int maxHistoryMessages = 10;
+
+        private int maxHistorySize = 131072;
+
         public String getBaseUrl() {
             return baseUrl;
         }
@@ -143,6 +151,38 @@ public class AppProperties {
 
         public void setMinRefreshIntervalSeconds(int minRefreshIntervalSeconds) {
             this.minRefreshIntervalSeconds = minRefreshIntervalSeconds;
+        }
+
+        public boolean isDisableTools() {
+            return disableTools;
+        }
+
+        public void setDisableTools(boolean disableTools) {
+            this.disableTools = disableTools;
+        }
+
+        public boolean isDisableHistory() {
+            return disableHistory;
+        }
+
+        public void setDisableHistory(boolean disableHistory) {
+            this.disableHistory = disableHistory;
+        }
+
+        public int getMaxHistoryMessages() {
+            return maxHistoryMessages;
+        }
+
+        public void setMaxHistoryMessages(int maxHistoryMessages) {
+            this.maxHistoryMessages = maxHistoryMessages;
+        }
+
+        public int getMaxHistorySize() {
+            return maxHistorySize;
+        }
+
+        public void setMaxHistorySize(int maxHistorySize) {
+            this.maxHistorySize = maxHistorySize;
         }
 
         void resolveTokenFiles() {

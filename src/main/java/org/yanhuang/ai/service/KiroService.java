@@ -93,12 +93,19 @@ public class KiroService {
 
     private Mono<List<JsonNode>> callKiroEvents(AnthropicChatRequest request) {
         ObjectNode payload = buildKiroPayload(request);
-        log.info("Sending request to Kiro API: {}", properties.getKiro().getBaseUrl());
+        String token = tokenManager.ensureToken();
+
+        log.info("=== Kiro API Request Debug ===");
+        log.info("URL: {}", properties.getKiro().getBaseUrl());
+        log.info("Authorization: Bearer {}...", token.substring(0, Math.min(token.length(), 20)));
+        log.info("Content-Type: {}", MediaType.APPLICATION_JSON);
+        log.info("Accept: {}", MediaType.TEXT_EVENT_STREAM);
+        log.info("Profile ARN: {}", properties.getKiro().getProfileArn());
+        log.info("Payload size: {} characters", payload.toString().length());
         log.info("Payload: {}", payload.toString());
-        log.info("Using Profile ARN: {}", properties.getKiro().getProfileArn());
 
         return webClient.post()
-            .header("Authorization", "Bearer " + tokenManager.ensureToken())
+            .header("Authorization", "Bearer " + token)
             .contentType(MediaType.APPLICATION_JSON)
             .accept(MediaType.TEXT_EVENT_STREAM)
             .bodyValue(payload)
@@ -114,26 +121,48 @@ public class KiroService {
             })
             .timeout(Duration.ofSeconds(120))
             .onErrorResume(error -> {
-                log.error("Kiro API call failed. Status: {}, Error: {}",
-                    error instanceof WebClientResponseException ?
-                    ((WebClientResponseException) error).getStatusCode() : "Unknown",
-                    error.getMessage());
+                log.error("=== Kiro API Error Debug ===");
                 if (error instanceof WebClientResponseException) {
                     WebClientResponseException webEx = (WebClientResponseException) error;
-                    log.error("Response body: {}", webEx.getResponseBodyAsString());
+                    log.error("Status Code: {}", webEx.getStatusCode());
+                    log.error("Status Text: {}", webEx.getStatusText());
+                    log.error("Response Headers: {}", webEx.getHeaders());
+                    log.error("Response Body: {}", webEx.getResponseBodyAsString());
+                } else {
+                    log.error("Error Type: {}", error.getClass().getSimpleName());
+                    log.error("Error Message: {}", error.getMessage());
                 }
+                log.error("Request URL: {}", properties.getKiro().getBaseUrl());
+                log.error("Original Payload size: {} characters", payload.toString().length());
+
                 return tokenManager.refreshIfNeeded()
                     .flatMap(refreshed -> {
-                        log.info("Retrying with refreshed token...");
+                        log.info("=== Kiro API Retry Debug ===");
+                        log.info("Token refreshed: {}", refreshed);
+                        log.info("Retrying with new token...");
+                        String newToken = tokenManager.ensureToken();
+                        log.info("New Authorization: Bearer {}...", newToken.substring(0, Math.min(newToken.length(), 20)));
+
                         return webClient.post()
-                            .header("Authorization", "Bearer " + tokenManager.ensureToken())
+                            .header("Authorization", "Bearer " + newToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .accept(MediaType.TEXT_EVENT_STREAM)
                             .bodyValue(payload)
                             .retrieve()
                             .bodyToMono(byte[].class)
                             .map(eventParser::parse)
-                            .timeout(Duration.ofSeconds(120));
+                            .timeout(Duration.ofSeconds(120))
+                            .onErrorResume(retryError -> {
+                                log.error("=== Retry Failed ===");
+                                if (retryError instanceof WebClientResponseException) {
+                                    WebClientResponseException retryWebEx = (WebClientResponseException) retryError;
+                                    log.error("Retry Status Code: {}", retryWebEx.getStatusCode());
+                                    log.error("Retry Status Text: {}", retryWebEx.getStatusText());
+                                    log.error("Retry Response Body: {}", retryWebEx.getResponseBodyAsString());
+                                }
+                                log.error("Retry Error: {}", retryError.getMessage());
+                                return Mono.error(retryError);
+                            });
                     });
             });
     }
@@ -149,7 +178,11 @@ public class KiroService {
         userInput.put("modelId", mapModel(request.getModel()));
         userInput.put("origin", "AI_EDITOR");
 
-        if (!CollectionUtils.isEmpty(request.getTools())) {
+        // Temporarily disable tools context to debug 400 error
+        boolean disableToolsContext = properties.getKiro().isDisableTools();
+        log.info("Tools context disabled: {}", disableToolsContext);
+
+        if (!disableToolsContext && !CollectionUtils.isEmpty(request.getTools())) {
             // Log MCP tool detection
             long mcpToolCount = mcpToolIdentifier.countMcpTools(request.getTools());
             if (mcpToolCount > 0) {
@@ -408,8 +441,41 @@ public class KiroService {
         // Exclude the last message (current one) from history
         List<AnthropicMessage> historicalMessages = request.getMessages().subList(0, request.getMessages().size() - 1);
 
+        // Apply history limit to control payload size
+        int maxHistoryMessages = properties.getKiro().getMaxHistoryMessages();
+        boolean disableHistory = properties.getKiro().isDisableHistory();
+
+        log.info("History settings: disabled={}, max_messages={}, actual_messages={}",
+            disableHistory, maxHistoryMessages, historicalMessages.size());
+
+        if (disableHistory) {
+            log.info("History completely disabled");
+            return history;
+        }
+
+        // Limit history to the most recent messages
+        if (historicalMessages.size() > maxHistoryMessages) {
+            int skipCount = historicalMessages.size() - maxHistoryMessages;
+            historicalMessages = historicalMessages.subList(skipCount, historicalMessages.size());
+            log.info("Limited history by skipping {} oldest messages, keeping {} most recent",
+                skipCount, maxHistoryMessages);
+        }
+
+        final int[] totalContentSize = {0};
+        final int maxHistorySize = properties.getKiro().getMaxHistorySize();
+
         historicalMessages.forEach(message -> {
             String content = buildMessageContent(message);
+
+            // Check if adding this message would exceed size limit
+            if (totalContentSize[0] + content.length() > maxHistorySize) {
+                log.info("Skipping message due to size limit: current={}, message_size={}, limit={}",
+                    totalContentSize[0], content.length(), maxHistorySize);
+                return;
+            }
+
+            totalContentSize[0] += content.length();
+
             if ("user".equalsIgnoreCase(message.getRole())) {
                 ObjectNode userNode = mapper.createObjectNode();
                 userNode.set("userInputMessage", mapper.createObjectNode()
@@ -424,6 +490,8 @@ public class KiroService {
                 history.add(assistantNode);
             }
         });
+
+        log.info("Final history: {} messages, {} characters", history.size(), totalContentSize[0]);
 
         return history;
     }
@@ -763,7 +831,7 @@ public class KiroService {
             case "claude-sonnet-4-5-20250929" -> "CLAUDE_SONNET_4_5_20250929_V1_0";
             case "claude-3-5-sonnet-20241022" -> "auto";
             case "claude-3-5-haiku-20241022" -> "auto";
-            default -> "auto";
+            default -> "CLAUDE_SONNET_4_5_20250929_V1_0";
         };
     }
 

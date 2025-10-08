@@ -19,6 +19,10 @@ app:
     refresh-token-file: ${KIRO_REFRESH_TOKEN_PATH:}
     refresh-url: ${KIRO_REFRESH_URL:https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken}
     min-refresh-interval-seconds: ${KIRO_REFRESH_MIN_INTERVAL:5}
+    disable-tools: ${KIRO_DISABLE_TOOLS:false}
+    disable-history: ${KIRO_DISABLE_HISTORY:false}
+    max-history-messages: ${KIRO_MAX_HISTORY_MESSAGES:10}
+    max-history-size: ${KIRO_MAX_HISTORY_SIZE:131072}
 
 server:
   port: 7860
