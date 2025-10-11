@@ -39,6 +39,10 @@ public class KiroService {
 
     private static final Logger log = LoggerFactory.getLogger(KiroService.class);
 
+    // Maximum length for tool result content to prevent payload size issues
+    // Kiro Gateway has a limit of ~400-500KB for entire payload
+    private static final int MAX_TOOL_RESULT_LENGTH = 50000; // 50KB per tool result
+
     private final AppProperties properties;
     private final TokenManager tokenManager;
     private final CodeWhispererEventParser eventParser;
@@ -195,6 +199,56 @@ public class KiroService {
     ObjectNode buildKiroPayload(AnthropicChatRequest request) {
         if (log.isDebugEnabled()) {
             log.debug("=== Building Kiro Payload ===");
+            log.debug("=== REQUEST FROM CLAUDE CODE ANALYSIS ===");
+            log.debug("Total messages in request: {}", request.getMessages() != null ? request.getMessages().size() : 0);
+
+            if (request.getMessages() != null) {
+                // Analyze message composition
+                int toolUseCount = 0;
+                int toolResultCount = 0;
+                int textOnlyCount = 0;
+                int emptyCount = 0;
+
+                for (int i = 0; i < request.getMessages().size(); i++) {
+                    AnthropicMessage msg = request.getMessages().get(i);
+                    boolean hasText = false;
+                    boolean hasToolUse = false;
+                    boolean hasToolResult = false;
+
+                    if (msg.getContent() != null) {
+                        for (AnthropicMessage.ContentBlock block : msg.getContent()) {
+                            if ("text".equalsIgnoreCase(block.getType())) hasText = true;
+                            if ("tool_use".equalsIgnoreCase(block.getType())) hasToolUse = true;
+                            if ("tool_result".equalsIgnoreCase(block.getType())) hasToolResult = true;
+                        }
+                    }
+
+                    String msgType = "";
+                    if (hasToolUse) {
+                        msgType = "TOOL_USE";
+                        toolUseCount++;
+                    } else if (hasToolResult) {
+                        msgType = "TOOL_RESULT";
+                        toolResultCount++;
+                    } else if (hasText) {
+                        msgType = "TEXT";
+                        textOnlyCount++;
+                    } else {
+                        msgType = "EMPTY";
+                        emptyCount++;
+                    }
+
+                    log.debug("Message {}: role={}, type={}, blocks={}",
+                        i, msg.getRole(), msgType, msg.getContent() != null ? msg.getContent().size() : 0);
+                }
+
+                log.debug("=== MESSAGE SUMMARY ===");
+                log.debug("  Text-only messages: {}", textOnlyCount);
+                log.debug("  Tool-use messages: {}", toolUseCount);
+                log.debug("  Tool-result messages: {}", toolResultCount);
+                log.debug("  Empty messages: {}", emptyCount);
+                log.debug("  Total: {}", request.getMessages().size());
+            }
         }
 
         String conversationId = UUID.randomUUID().toString();
@@ -362,6 +416,31 @@ public class KiroService {
                         String media = src.getMediaType() != null ? src.getMediaType() : "unknown";
                         String srcType = src.getType() != null ? src.getType() : "unknown";
                         segments.add("[" + lastMessage.getRole() + "] " + "<image media=" + media + ", type=" + srcType + ">");
+                    } else if ("tool_result".equalsIgnoreCase(block.getType())) {
+                        // Handle tool result - this is critical for preventing tool call loops
+                        String resultContent = serializeToolResult(block.getContent());
+
+                        // Truncate tool results to prevent payload size issues
+                        if (resultContent.length() > MAX_TOOL_RESULT_LENGTH) {
+                            int originalLength = resultContent.length();
+                            String truncated = resultContent.substring(0, MAX_TOOL_RESULT_LENGTH);
+                            resultContent = truncated + "\n...[Content truncated. Original length: " + originalLength + " characters]";
+                            log.warn("Tool result truncated: toolUseId={}, original_length={}, truncated_to={}",
+                                block.getToolUseId(), originalLength, resultContent.length());
+                        }
+
+                        segments.add("[Tool " + block.getToolUseId() + " returned: " + resultContent + "]");
+                        if (log.isDebugEnabled()) {
+                            log.debug("Current message contains tool_result: toolUseId={}, result_length={}",
+                                block.getToolUseId(), resultContent.length());
+                        }
+                    } else if ("tool_use".equalsIgnoreCase(block.getType())) {
+                        // Handle tool use - may appear in assistant messages
+                        segments.add("[Called " + block.getName() + " with args: " + block.getInput() + "]");
+                        if (log.isDebugEnabled()) {
+                            log.debug("Current message contains tool_use: name={}, id={}",
+                                block.getName(), block.getId());
+                        }
                     }
                 });
             }
@@ -582,8 +661,25 @@ public class KiroService {
         final int maxHistorySize = properties.getKiro().getMaxHistorySize();
         int totalContentSize = 0;
 
-        for (AnthropicMessage message : historicalMessages) {
+        for (int msgIdx = 0; msgIdx < historicalMessages.size(); msgIdx++) {
+            AnthropicMessage message = historicalMessages.get(msgIdx);
+
+            if (log.isDebugEnabled()) {
+                log.debug("=== Processing history message {} ===", msgIdx);
+                log.debug("  Role: {}", message.getRole());
+                log.debug("  Content blocks: {}", message.getContent() != null ? message.getContent().size() : 0);
+            }
+
             String content = buildMessageContent(message);
+
+            // Convert empty messages to minimal placeholder to prevent payload bloat
+            // while maintaining message pairing logic integrity
+            if (content == null || content.trim().isEmpty()) {
+                content = ".";
+                if (log.isDebugEnabled()) {
+                    log.debug("Empty message converted to minimal placeholder for role: {}", message.getRole());
+                }
+            }
 
             // Check size limit
             if (totalContentSize + content.length() > maxHistorySize) {
@@ -598,8 +694,14 @@ public class KiroService {
 
             if ("user".equalsIgnoreCase(message.getRole())) {
                 processedMessages.add(new MessagePair("user", content));
+                if (log.isDebugEnabled()) {
+                    log.debug("  Added to processedMessages as USER, content_length={}", content.length());
+                }
             } else if ("assistant".equalsIgnoreCase(message.getRole())) {
                 processedMessages.add(new MessagePair("assistant", content));
+                if (log.isDebugEnabled()) {
+                    log.debug("  Added to processedMessages as ASSISTANT, content_length={}", content.length());
+                }
             }
             // Note: tool messages are not directly supported in Anthropic format
             // They would be part of content blocks in user/assistant messages
@@ -691,6 +793,9 @@ public class KiroService {
 
     private String buildMessageContent(AnthropicMessage message) {
         if (CollectionUtils.isEmpty(message.getContent())) {
+            if (log.isDebugEnabled()) {
+                log.debug("Message has no content blocks, role={}", message.getRole());
+            }
             return "";
         }
         StringBuilder builder = new StringBuilder();
@@ -701,22 +806,53 @@ public class KiroService {
                     builder.append("[user] ");
                 }
                 builder.append(block.getText());
+                if (log.isDebugEnabled()) {
+                    log.debug("  Content block [text]: length={}", block.getText() != null ? block.getText().length() : 0);
+                }
             } else if ("tool_use".equalsIgnoreCase(block.getType())) {
-                builder.append("[Called ")
-                    .append(block.getName())
-                    .append(" with args: ")
-                    .append(block.getInput())
-                    .append("]");
+                String toolUseInfo = "[Called " + block.getName() + " with args: " + block.getInput() + "]";
+                builder.append(toolUseInfo);
+                if (log.isDebugEnabled()) {
+                    log.debug("  Content block [tool_use]: id={}, name={}, input_length={}",
+                        block.getId(), block.getName(), block.getInput() != null ? block.getInput().toString().length() : 0);
+                }
             } else if ("tool_result".equalsIgnoreCase(block.getType())) {
                 // Handle tool result - include in message content for Kiro
+                String resultContent = serializeToolResult(block.getContent());
+
+                // Truncate tool results in history to prevent payload bloat
+                if (resultContent.length() > MAX_TOOL_RESULT_LENGTH) {
+                    int originalLength = resultContent.length();
+                    resultContent = resultContent.substring(0, MAX_TOOL_RESULT_LENGTH)
+                        + "\n...[Content truncated. Original length: " + originalLength + " characters]";
+                    if (log.isDebugEnabled()) {
+                        log.debug("  Tool result truncated in history: toolUseId={}, original={}, truncated={}",
+                            block.getToolUseId(), originalLength, resultContent.length());
+                    }
+                }
+
                 builder.append("[Tool ")
                     .append(block.getToolUseId())
                     .append(" returned: ")
-                    .append(serializeToolResult(block.getContent()))
+                    .append(resultContent)
                     .append("]");
+                if (log.isDebugEnabled()) {
+                    log.debug("  Content block [tool_result]: toolUseId={}, result_length={}, is_error={}",
+                        block.getToolUseId(), resultContent.length(), block.getIsError());
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("  Content block [{}]: skipped", block.getType());
+                }
             }
         });
-        return builder.toString();
+
+        String result = builder.toString();
+        if (log.isDebugEnabled()) {
+            log.debug("Built message content: role={}, total_length={}, content_blocks={}",
+                message.getRole(), result.length(), message.getContent().size());
+        }
+        return result;
     }
 
     /**
