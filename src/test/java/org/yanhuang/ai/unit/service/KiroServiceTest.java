@@ -1,4 +1,4 @@
-package org.yanhuang.ai.service;
+package org.yanhuang.ai.unit.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,6 +28,9 @@ import org.yanhuang.ai.model.ToolDefinition;
 import org.yanhuang.ai.parser.BracketToolCallParser;
 import org.yanhuang.ai.parser.CodeWhispererEventParser;
 import org.yanhuang.ai.parser.ToolCallDeduplicator;
+import org.yanhuang.ai.service.TokenManager;
+import org.yanhuang.ai.service.McpToolIdentifier;
+import org.yanhuang.ai.service.KiroService;
 
 class KiroServiceTest {
 

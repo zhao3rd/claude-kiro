@@ -35,10 +35,13 @@ public class AnthropicChatRequest {
     private Double topP;
 
     @JsonProperty("top_k")
-    private Double topK;
+    private Integer topK;
 
     @JsonProperty("stop_sequences")
     private List<String> stopSequences;
+
+    // Request timeout in milliseconds
+    private Integer timeout;
 
     private List<ToolDefinition> tools;
 
@@ -134,11 +137,11 @@ public class AnthropicChatRequest {
         this.topP = topP;
     }
 
-    public Double getTopK() {
+    public Integer getTopK() {
         return topK;
     }
 
-    public void setTopK(Double topK) {
+    public void setTopK(Integer topK) {
         this.topK = topK;
     }
 
@@ -148,6 +151,14 @@ public class AnthropicChatRequest {
 
     public void setStopSequences(List<String> stopSequences) {
         this.stopSequences = stopSequences;
+    }
+
+    public Integer getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Integer timeout) {
+        this.timeout = timeout;
     }
 
     public List<ToolDefinition> getTools() {

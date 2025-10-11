@@ -1,10 +1,11 @@
-package org.yanhuang.ai.service;
+package org.yanhuang.ai.unit.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.yanhuang.ai.model.AnthropicChatRequest;
 import org.yanhuang.ai.model.AnthropicMessage;
 import org.yanhuang.ai.model.ToolDefinition;
+import org.yanhuang.ai.service.TokenCounter;
 
 import java.util.ArrayList;
 import java.util.HashMap;

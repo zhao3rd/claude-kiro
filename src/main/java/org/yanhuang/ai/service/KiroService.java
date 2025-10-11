@@ -252,19 +252,48 @@ public class KiroService {
                 String effectiveDescription = tool.getEffectiveDescription();
                 Map<String, Object> effectiveInputSchema = tool.getEffectiveInputSchema();
 
-                // Only add non-null values to avoid null fields in JSON
+                // Always include required fields, using defaults if missing
+                // Name is required and must not be null
                 if (effectiveName != null) {
                     toolSpec.put("name", effectiveName);
+                } else {
+                    log.warn("Tool definition missing name, using default");
+                    toolSpec.put("name", "general_tool");
                 }
-                if (effectiveDescription != null) {
+
+                // Description should always be present (use empty string if missing)
+                if (effectiveDescription != null && !effectiveDescription.isEmpty()) {
                     toolSpec.put("description", effectiveDescription);
+                } else {
+                    toolSpec.put("description", toolSpec.get("name"));
                 }
-                if (effectiveInputSchema != null) {
+
+                // InputSchema should always be present
+                // Ensure it at least has "type": "object" for Kiro API compliance
+                if (effectiveInputSchema != null && !effectiveInputSchema.isEmpty()) {
+                    // If the schema doesn't have a "type" field, add it
+                    if (!effectiveInputSchema.containsKey("type")) {
+                        effectiveInputSchema = new HashMap<>(effectiveInputSchema);
+                        effectiveInputSchema.put("type", "object");
+                    }
                     toolSpec.set("inputSchema", mapper.createObjectNode().set("json", mapper.valueToTree(effectiveInputSchema)));
+                } else {
+                    // Create minimal valid schema with type and properties
+                    ObjectNode minimalSchema = mapper.createObjectNode();
+                    minimalSchema.put("type", "object");
+                    minimalSchema.set("properties", mapper.createObjectNode());
+                    toolSpec.set("inputSchema", mapper.createObjectNode().set("json", minimalSchema));
                 }
 
                 specNode.set("toolSpecification", toolSpec);
                 toolsNode.add(specNode);
+
+                if (log.isDebugEnabled()) {
+                    log.debug("Added tool: name={}, description={}, hasInputSchema={}",
+                        effectiveName != null ? effectiveName : "null",
+                        effectiveDescription != null ? effectiveDescription : "empty",
+                        effectiveInputSchema != null && !effectiveInputSchema.isEmpty());
+                }
             });
             context.set("tools", toolsNode);
             if (request.getToolChoice() != null && !request.getToolChoice().isEmpty()) {
@@ -850,8 +879,21 @@ public class KiroService {
         messageNode.put("type", "message");
         messageNode.put("role", response.getRole());
         messageNode.put("model", response.getModel());
+
+        // Add empty content array (official Anthropic API requirement)
+        messageNode.set("content", mapper.createArrayNode());
+
         messageNode.putNull("stop_reason");
         messageNode.putNull("stop_sequence");
+
+        // Add usage object with initial values (official Anthropic API requirement)
+        if (response.getUsage() != null) {
+            ObjectNode usageNode = mapper.createObjectNode();
+            usageNode.put("input_tokens", response.getUsage().getInputTokens());
+            usageNode.put("output_tokens", 0);  // Streaming starts with 0 output tokens
+            messageNode.set("usage", usageNode);
+        }
+
         messageNode.put("created_at", response.getCreatedAt());
         messageStart.set("message", messageNode);
         events.add(toSseEvent("message_start", messageStart));

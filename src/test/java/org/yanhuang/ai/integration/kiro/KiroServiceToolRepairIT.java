@@ -1,4 +1,4 @@
-package org.yanhuang.ai.service;
+package org.yanhuang.ai.integration.kiro;
 
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -10,6 +10,7 @@ import org.yanhuang.ai.model.AnthropicChatRequest;
 import org.yanhuang.ai.model.AnthropicChatResponse;
 import org.yanhuang.ai.model.AnthropicMessage;
 import org.yanhuang.ai.model.ToolDefinition;
+import org.yanhuang.ai.service.KiroService;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -18,7 +19,7 @@ import java.util.*;
 @SpringBootTest
 @TestPropertySource(properties = {
     "app.kiro.disable-tools=false",
-    "app.kiro.disable-history=false",
+    "app.kiro.disable-history=true",
     "app.kiro.max-history-messages=10",
     "app.kiro.max-history-size=131072"
 })

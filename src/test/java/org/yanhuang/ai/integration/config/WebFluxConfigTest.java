@@ -1,4 +1,4 @@
-package org.yanhuang.ai.config;
+package org.yanhuang.ai.integration.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

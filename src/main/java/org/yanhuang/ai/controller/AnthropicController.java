@@ -345,8 +345,44 @@ public class AnthropicController {
                 }
                 break;
             default:
-                // Unknown type
-                throw new IllegalArgumentException("tool_choice.type must be one of: auto, any, tool, none, required");
+                // Non-standard type value - treat as equivalent to "tool" type
+                // This supports legacy/alternative formats where type might be a custom value
+                // Validation follows same rules as "tool" case
+                if (!toolChoice.containsKey("name")) {
+                    throw new IllegalArgumentException("tool_choice.name is required when tool_choice.type is a specific tool name");
+                }
+
+                Object customNameObj = toolChoice.get("name");
+                if (!(customNameObj instanceof String) || ((String) customNameObj).trim().isEmpty()) {
+                    throw new IllegalArgumentException("tool_choice.name must be a non-empty string");
+                }
+
+                String customToolName = (String) customNameObj;
+                if (tools != null && !tools.isEmpty()) {
+                    boolean toolFound = tools.stream().anyMatch(tool -> {
+                        if (tool instanceof ToolDefinition td) {
+                            return customToolName.equals(td.getEffectiveName());
+                        }
+                        if (tool instanceof Map) {
+                            Map<?, ?> toolMap = (Map<?, ?>) tool;
+                            Object direct = toolMap.get("name");
+                            if (customToolName.equals(direct)) {
+                                return true;
+                            }
+                            Object function = toolMap.get("function");
+                            if (function instanceof Map) {
+                                Object fnName = ((Map<?, ?>) function).get("name");
+                                return customToolName.equals(fnName);
+                            }
+                        }
+                        return false;
+                    });
+
+                    if (!toolFound) {
+                        throw new IllegalArgumentException("tool_choice.name '" + customToolName + "' must be present in the tools list");
+                    }
+                }
+                break;
         }
     }
 

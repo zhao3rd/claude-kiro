@@ -1,4 +1,4 @@
-package org.yanhuang.ai.service;
+package org.yanhuang.ai.integration.kiro;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -14,6 +14,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.yanhuang.ai.config.AppProperties;
+import org.yanhuang.ai.service.TokenManager;
 
 import java.time.Duration;
 import java.util.UUID;

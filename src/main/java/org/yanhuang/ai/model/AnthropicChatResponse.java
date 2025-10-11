@@ -15,8 +15,19 @@ public class AnthropicChatResponse {
 
     private String model;
 
+    /**
+     * Extension field: Message creation timestamp (seconds since epoch).
+     *
+     * <p><strong>Note:</strong> This is NOT part of the official Anthropic API
+     * specification. This field is provided for internal logging and debugging
+     * purposes. Client applications should not rely on this field as it may be
+     * removed in future versions for better API compatibility.</p>
+     *
+     * @see <a href="https://docs.anthropic.com/en/api/messages">Official API Docs</a>
+     */
     @JsonProperty("created_at")
-    private long createdAt;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long createdAt;
 
     private String role = "assistant";
 
@@ -54,11 +65,11 @@ public class AnthropicChatResponse {
         this.model = model;
     }
 
-    public long getCreatedAt() {
+    public Long getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(long createdAt) {
+    public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
     }
 

@@ -40,6 +40,12 @@ class AnthropicControllerTest {
     @Mock
     private KiroService kiroService;
 
+    @Mock
+    private org.yanhuang.ai.service.TokenCounter tokenCounter;
+
+    @Mock
+    private org.yanhuang.ai.service.ImageValidator imageValidator;
+
     @InjectMocks
     private AnthropicController controller;
 
@@ -48,6 +54,11 @@ class AnthropicControllerTest {
         // Setup AppProperties mock - these are used by most tests
         when(properties.getApiKey()).thenReturn("test-api-key-12345");
         when(properties.getAnthropicVersion()).thenReturn("2023-06-01");
+
+        // Setup TokenCounter mock to allow context window validation
+        // Use doNothing() since validateContextWindow returns void
+        org.mockito.Mockito.doNothing().when(tokenCounter)
+            .validateContextWindow(any(AnthropicChatRequest.class), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
@@ -218,16 +229,27 @@ class AnthropicControllerTest {
     }
 
     @Test
-    @DisplayName("应该拒绝流式请求中超过限制的max_tokens")
+    @DisplayName("应该自动调整流式请求中超过限制的max_tokens")
     void shouldRejectStreamingRequestWithExcessiveMaxTokens() {
         // Given
         AnthropicChatRequest request = TestDataFactory.createStreamRequest();
-        request.setMaxTokens(5000); // Exceeds streaming limit of 4096
+        request.setMaxTokens(70000); // Exceeds streaming limit of 64000
 
-        // When & Then
-        assertThrows(IllegalArgumentException.class, () -> {
-            controller.streamMessage("test-api-key-12345", null, "2023-06-01", request);
-        });
+        // Mock streamCompletion to return a valid stream
+        Flux<String> mockStream = Flux.just(
+                "event: message_start\ndata: {\"type\":\"message_start\"}\n\n"
+        );
+        when(kiroService.streamCompletion(any(AnthropicChatRequest.class)))
+                .thenReturn(mockStream);
+
+        // When
+        ResponseEntity<Flux<String>> result = controller.streamMessage("test-api-key-12345", null, "2023-06-01", request);
+
+        // Then - request should be processed with capped max_tokens
+        assertNotNull(result);
+        assertNotNull(result.getBody());
+        // Verify max_tokens was capped to 64000 (soft-cap behavior)
+        assertEquals(64000, request.getMaxTokens());
     }
 
     @Test

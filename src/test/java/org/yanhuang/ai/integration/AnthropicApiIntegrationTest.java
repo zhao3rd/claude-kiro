@@ -12,6 +12,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.yanhuang.ai.config.AppProperties;
 import org.yanhuang.ai.controller.AnthropicController;
 import org.yanhuang.ai.service.KiroService;
+import org.yanhuang.ai.service.TokenCounter;
+import org.yanhuang.ai.service.ImageValidator;
 import org.yanhuang.ai.TestDataFactory;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +36,12 @@ class AnthropicApiIntegrationTest {
 
     @MockBean
     private KiroService kiroService;
+
+    @MockBean
+    private TokenCounter tokenCounter;
+
+    @MockBean
+    private ImageValidator imageValidator;
 
     @BeforeEach
     void setUp() {
